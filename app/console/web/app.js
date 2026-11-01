@@ -41,6 +41,9 @@ async function init() {
   loadAutostart();
   loadStats();
   setInterval(refreshStatus, 5000);
+  setInterval(refreshOverviewLog, 10000);
+  refreshOverviewLog();
+  setInterval(tickUptime, 1000);
   refreshStatus();
   loadLogs();
   const hash = location.hash.replace("#", "");
@@ -86,6 +89,80 @@ function renderLanguages() {
   });
 }
 
+const modelCache = {};
+
+function modelOptions(m) {
+  const id = m.id || "";
+  const list = modelCache[id] || [];
+  const current = m.model || "";
+  const names = list.length ? list : current ? [current] : [];
+  if (!names.length) return `<option value="">加载模型列表中…</option>`;
+  return names
+    .map(
+      (v) =>
+        `<option value="${escapeAttr(v)}" ${v === current ? "selected" : ""}>${escapeAttr(v)}</option>`
+    )
+    .join("");
+}
+
+function fillModelSelect(card, names) {
+  const sel = card.querySelector(".m-model");
+  if (!sel || !names || !names.length) return;
+  const current = sel.value || "";
+  sel.innerHTML = names
+    .map(
+      (v) =>
+        `<option value="${escapeAttr(v)}" ${v === current ? "selected" : ""}>${escapeAttr(v)}</option>`
+    )
+    .join("");
+  if (!sel.value) sel.value = names[0];
+}
+
+async function autoLoadModels() {
+  const cards = Array.from(document.querySelectorAll(".model-card"));
+  for (const card of cards) {
+    if (modelCache[card.dataset.id]) continue;
+    const payload = readModel(card);
+    if (!payload.base_url || !payload.api_key) continue;
+    const res = await api().list_models(payload);
+    if (res && res.ok && (res.models || []).length) {
+      modelCache[card.dataset.id] = res.models;
+      fillModelSelect(card, res.models);
+    }
+  }
+}
+
+async function refreshOverviewLog() {
+  const el = $("#ov-log");
+  if (!el) return;
+  try {
+    const lines = await api().read_logs(12);
+    el.textContent = (lines || []).join("\n") || "暂无日志";
+    el.scrollTop = el.scrollHeight;
+  } catch (e) {
+    el.textContent = "日志读取失败";
+  }
+}
+
+function formatDuration(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h} 小时 ${m} 分 ${s} 秒`;
+  return `${m} 分 ${s} 秒`;
+}
+
+function tickUptime() {
+  const el = $("#stat-uptime");
+  if (!el) return;
+  if (!S.startedAt) {
+    el.textContent = "点「启动」开始工作";
+    return;
+  }
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - S.startedAt));
+  el.textContent = `已运行 ${formatDuration(sec)}`;
+}
+
 function modelCard(m, index) {
   const id = m.id || `model-${Date.now()}-${index}`;
   return `
@@ -97,7 +174,9 @@ function modelCard(m, index) {
       </div>
       <div class="model-grid">
         <label class="field">接口地址<input class="m-base" value="${escapeAttr(m.base_url || "")}" placeholder="https://api.deepseek.com/v1"></label>
-        <label class="field">模型名<input class="m-model" value="${escapeAttr(m.model || "")}" placeholder="deepseek-v4-pro"></label>
+        <label class="field">模型名
+          <select class="m-model">${modelOptions(m)}</select>
+        </label>
         <label class="field">API Key<input class="m-key" type="password" value="${escapeAttr(m.api_key || "")}" placeholder="sk-..."></label>
         <label class="field">用途
           <select class="m-kind">
@@ -118,6 +197,7 @@ function renderModels() {
   $("#model-list").innerHTML = list.length
     ? list.map((m, i) => modelCard(m, i)).join("")
     : `<div class="empty">还没有模型，点下面「添加模型」开始</div>`;
+  autoLoadModels();
 }
 
 function renderFeatures() {
@@ -213,6 +293,10 @@ function bindStatic() {
       if (res.ok) {
         result.className = "test-result ok";
         result.textContent = `${res.message} · 可用模型 ${(res.models || []).length} 个`;
+        if (res.models && res.models.length) {
+          modelCache[card.dataset.id] = res.models;
+          fillModelSelect(card, res.models);
+        }
       } else {
         result.className = "test-result err";
         result.textContent = res.message;
@@ -254,6 +338,7 @@ function bindStatic() {
   $("#btn-open-data").addEventListener("click", () => api().open_folder("data"));
 
   $("#btn-quick-logs").addEventListener("click", () => switchView("logs"));
+  $("#ov-log-open").addEventListener("click", () => switchView("logs"));
   $("#btn-quick-test").addEventListener("click", () => switchView("prompts"));
   $("#btn-quick-data").addEventListener("click", () => api().open_folder("data"));
   $("#btn-quick-diag").addEventListener("click", () => exportDiag(null));
@@ -421,7 +506,12 @@ async function refreshStatus() {
   $("#side-dot").className = "dot " + (running ? "on" : "off");
   $("#side-status-text").textContent = running ? "机器人运行中" : "机器人已停止";
   $("#stat-status").textContent = running ? "运行中" : "已停止";
-  $("#stat-uptime").textContent = running ? `已运行 ${st.uptime}` : "点「启动」开始工作";
+  const ctl = $("#ctl-state");
+  if (ctl) ctl.textContent = running ? `当前状态：运行中${st.pid ? " · PID " + st.pid : ""}` : "当前状态：已停止";
+  const ovDot = $("#ov-dot");
+  if (ovDot) ovDot.className = "ov-dot" + (running ? " on" : "");
+  S.startedAt = running ? st.started_at : null;
+  tickUptime();
 
   const cfg = S.config || {};
   const models = cfg.models || [];

@@ -143,6 +143,7 @@ class ConsoleApi:
             "running": running,
             "pid": self.bot.proc.pid if running and self.bot.proc else None,
             "uptime": uptime,
+            "started_at": self.bot.started_at if running else None,
         }
 
     def bot_status(self) -> dict[str, Any]:
