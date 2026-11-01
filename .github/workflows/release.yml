@@ -1,0 +1,116 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Build backend
+        run: >
+          python -m PyInstaller --noconfirm --clean --windowed
+          --name TranslatorBotBackend
+          --add-data "app/console/web;app/console/web"
+          --add-data "assets;assets"
+          --collect-all langdetect
+          run.py
+
+      - name: Build updater
+        run: >
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name updater --distpath dist updater_entry.py
+
+      - name: Install Rust (GNU toolchain, no Visual Studio)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe" `
+            -OutFile "$env:RUNNER_TEMP\rustup-init.exe"
+          & "$env:RUNNER_TEMP\rustup-init.exe" -y --default-toolchain stable-x86_64-pc-windows-gnu --profile minimal
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Install w64devkit (linker/assembler)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://github.com/skeeto/w64devkit/releases/download/v2.11.0/w64devkit-x64-2.11.0.7z.exe" `
+            -OutFile "$env:RUNNER_TEMP\w64devkit.exe"
+          & "$env:RUNNER_TEMP\w64devkit.exe" -y -oC:\Temp\w64devkit
+
+      - name: Assemble package directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "dist/TranslatorBot/backend" | Out-Null
+          Copy-Item "dist/TranslatorBotBackend/*" "dist/TranslatorBot/backend/" -Recurse -Force
+          Copy-Item "dist/updater.exe" "dist/TranslatorBot/backend/updater.exe" -Force
+
+      - name: Build Rust host
+        shell: pwsh
+        run: .\build-host.ps1
+
+      - name: Fetch WebView2Loader
+        shell: pwsh
+        run: |
+          $index = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/index.json"
+          $version = ($index.versions | Where-Object { $_ -notmatch "-" } | Select-Object -Last 1)
+          $nupkg = "$env:RUNNER_TEMP\webview2.zip"
+          Invoke-WebRequest `
+            -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$version/microsoft.web.webview2.$version.nupkg" `
+            -OutFile $nupkg
+          Expand-Archive $nupkg -DestinationPath "$env:RUNNER_TEMP\webview2" -Force
+          Copy-Item "$env:RUNNER_TEMP\webview2\build\native\x64\WebView2Loader.dll" "dist/TranslatorBot/WebView2Loader.dll" -Force
+
+      - name: Create zip (UTF-8 filenames)
+        shell: python
+        run: |
+          import hashlib, os, zipfile
+          from pathlib import Path
+
+          root = Path("dist/TranslatorBot")
+          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          target = Path(f"dist/TranslatorBot-v{version}-win64.zip")
+          with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              for p in sorted(root.rglob("*")):
+                  if p.is_file():
+                      z.write(p, p.relative_to(root).as_posix())
+          digest = hashlib.sha256(target.read_bytes()).hexdigest()
+          Path("dist/zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer.iss"
+          $setup = Get-ChildItem "dist\TranslatorBot-Setup-*.exe" | Select-Object -First 1
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          $zipLine = Get-Content "dist\zip.sha256"
+          @($zipLine, "$hash  $($setup.Name)") | Set-Content -Path "dist/checksums.txt" -Encoding ascii
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*Setup*.exe
+            dist/checksums.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

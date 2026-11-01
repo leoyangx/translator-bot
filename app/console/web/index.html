@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>翻译机器人</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="/assets/icon-512.png" alt="">
+      <div>
+        <div class="title">翻译机器人</div>
+        <span class="ver">v<span id="app-version">0.0.1</span></span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button data-view="overview" class="active">
+        <span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>概览
+      </button>
+      <button data-view="languages">
+        <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg></span>语言
+      </button>
+      <button data-view="models">
+        <span class="ico"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>模型
+      </button>
+      <button data-view="features">
+        <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg></span>功能
+      </button>
+      <button data-view="prompts">
+        <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span>提示词
+      </button>
+      <button data-view="logs">
+        <span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9l3 3-3 3M13 15h4"/></svg></span>日志
+      </button>
+      <button data-view="settings">
+        <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></span>设置
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <div class="side-status">
+        <span class="dot" id="side-dot"></span>
+        <span id="side-status-text">检查中…</span>
+      </div>
+      <button class="btn ghost" id="btn-quit">退出程序</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1 id="view-title">概览</h1>
+      <div class="top-actions">
+        <span class="pill" id="status-pill"><span class="dot on" style="width:6px;height:6px"></span>运行中</span>
+        <button class="btn" id="btn-check-update">检查更新</button>
+        <button class="btn primary" id="btn-save">保存配置</button>
+      </div>
+    </div>
+
+    <div class="view-wrap">
+      <!-- 概览 -->
+      <section class="view active" id="view-overview">
+        <div class="banner" id="update-banner">
+          <div>
+            <b id="update-title">发现新版本</b>
+            <div class="hint" id="update-notes" style="margin:2px 0 0"></div>
+          </div>
+          <button class="btn primary" id="btn-do-update">下载并更新</button>
+        </div>
+
+        <div class="grid-4">
+          <div class="card stat">
+            <div class="label">机器人状态</div>
+            <div class="value" id="stat-status">—</div>
+            <div class="sub" id="stat-uptime">—</div>
+          </div>
+          <div class="card stat">
+            <div class="label">当前模型</div>
+            <div class="value" id="stat-model">—</div>
+            <div class="sub" id="stat-model-base">—</div>
+          </div>
+          <div class="card stat">
+            <div class="label">翻译方向</div>
+            <div class="value" id="stat-lang">—</div>
+            <div class="sub">自动识别 · 双向</div>
+          </div>
+          <div class="card stat">
+            <div class="label">今日调用</div>
+            <div class="value" id="stat-calls">0</div>
+            <div class="sub" id="stat-tokens">0 tokens</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h2>运行控制</h2>
+          <p class="hint">保存配置后需要重启才生效。</p>
+          <div class="toolbar">
+            <button class="btn primary" id="btn-start">启动</button>
+            <button class="btn" id="btn-restart">重启</button>
+            <button class="btn danger" id="btn-stop">停止</button>
+            <span class="test-result" id="ctl-result"></span>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h2>快捷操作</h2>
+          <p class="hint">常用的维护入口。</p>
+          <div class="quick-grid">
+            <button class="quick" id="btn-quick-logs"><span>日志</span><small>查看运行日志</small></button>
+            <button class="quick" id="btn-quick-test"><span>试译</span><small>用当前配置翻一句</small></button>
+            <button class="quick" id="btn-quick-data"><span>数据目录</span><small>打开缓存与术语库</small></button>
+            <button class="quick" id="btn-quick-diag"><span>诊断包</span><small>导出脱敏报告</small></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 语言 -->
+      <section class="view" id="view-languages">
+        <div class="card">
+          <h2>我的语言</h2>
+          <p class="hint">机器人把外语译成这个语言；你说这个语言时，它译成对方语言。</p>
+          <label class="field" style="max-width:320px">
+            <select id="f-my-lang"></select>
+          </label>
+        </div>
+
+        <div class="card">
+          <h2>对方语言</h2>
+          <p class="hint">勾选你经常打交道的语言。检测到其中之一时译成你的语言；你说母语时译成列表里的第一个。</p>
+          <div class="chips" id="partner-chips"></div>
+        </div>
+
+        <div class="card">
+          <h2>行为说明</h2>
+          <div class="switch-row">
+            <div>
+              <div class="name">自动识别语种</div>
+              <div class="desc">关闭后，所有消息都当作「对方语言列表的第一个」处理</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="f-autodetect"><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 模型 -->
+      <section class="view" id="view-models">
+        <div class="card">
+          <h2>模型列表</h2>
+          <p class="hint">任何 OpenAI 兼容接口都能接：DeepSeek、通义、智谱、OpenRouter、本地 Ollama。选一个作为默认。</p>
+          <div id="model-list"></div>
+          <div style="margin-top:12px">
+            <button class="btn" id="btn-add-model">+ 添加模型</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 功能 -->
+      <section class="view" id="view-features">
+        <div class="card">
+          <h2>消息卡片</h2>
+          <div class="switch-row">
+            <div><div class="name">双语对照</div><div class="desc">译文上方同时显示原文</div></div>
+            <label class="switch"><input type="checkbox" id="f-bilingual"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">语气按钮</div><div class="desc">更正式 / 更口语 / 直译</div></div>
+            <label class="switch"><input type="checkbox" id="f-tone"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">解释按钮</div><div class="desc">讲解外语原文的语法、敬语和俚语</div></div>
+            <label class="switch"><input type="checkbox" id="f-explain"><span></span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>翻译行为</h2>
+          <div class="switch-row">
+            <div><div class="name">上下文记忆</div><div class="desc">带上最近几条原文，改善指代和省略</div></div>
+            <label class="switch"><input type="checkbox" id="f-context"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">结果缓存</div><div class="desc">相同内容不重复计费</div></div>
+            <label class="switch"><input type="checkbox" id="f-cache"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">术语表</div><div class="desc">启用 /glossary 命令，固定人名和术语译法</div></div>
+            <label class="switch"><input type="checkbox" id="f-glossary"><span></span></label>
+          </div>
+          <div class="grid-2" style="margin-top:14px">
+            <label class="field">群聊响应方式
+              <select id="f-group-mode">
+                <option value="reply_or_mention">仅被回复或 @ 时</option>
+                <option value="mention">仅被 @ 时</option>
+                <option value="all">所有消息</option>
+              </select>
+            </label>
+            <label class="field">单次字数上限
+              <input type="number" id="f-max-chars" min="200" max="20000">
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 提示词 -->
+      <section class="view" id="view-prompts">
+        <div class="card">
+          <h2>翻译提示词</h2>
+          <p class="hint">留空使用内置默认。改完保存，右侧可以直接试译看效果。</p>
+          <div class="var-chips">
+            <span class="var">{src}</span><span class="var">{tgt}</span>
+            <span class="var">{tone}</span><span class="var">{glossary}</span>
+          </div>
+          <textarea id="f-prompt-translation" spellcheck="false"></textarea>
+          <div class="toolbar" style="margin-top:10px">
+            <button class="btn" id="btn-reset-translation">恢复默认</button>
+            <span class="test-result" id="prompt-hint"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>试译</h2>
+          <div class="test-panel">
+            <div>
+              <textarea id="test-input" placeholder="粘贴一句外语，或输入中文试试反向翻译"></textarea>
+              <div class="toolbar" style="margin-top:10px">
+                <button class="btn primary" id="btn-test">翻译</button>
+                <select id="test-tone" style="width:120px">
+                  <option value="natural">自然</option>
+                  <option value="formal">正式</option>
+                  <option value="casual">口语</option>
+                  <option value="literal">直译</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <div class="result-box" id="test-result">结果会显示在这里</div>
+              <div class="result-meta" id="test-meta"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>讲解提示词</h2>
+          <p class="hint">点「解释一下」时使用。留空使用内置默认。</p>
+          <textarea id="f-prompt-explain" spellcheck="false" style="min-height:100px"></textarea>
+          <div class="toolbar" style="margin-top:10px">
+            <button class="btn" id="btn-reset-explain">恢复默认</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日志 -->
+      <section class="view" id="view-logs">
+        <div class="card">
+          <h2>运行日志</h2>
+          <div class="toolbar">
+            <button class="btn" id="btn-refresh-log">刷新</button>
+            <button class="btn" id="btn-open-logs">打开日志文件夹</button>
+            <button class="btn" id="btn-diagnostics">导出诊断包</button>
+            <span class="test-result" id="log-hint"></span>
+          </div>
+          <div class="log-box" id="log-box"></div>
+        </div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="view" id="view-settings">
+        <div class="card">
+          <h2>连接</h2>
+          <p class="hint">Bot Token 从 @BotFather 获取。填完保存并重启即可生效。</p>
+          <div class="grid-2">
+            <label class="field">Telegram Bot Token
+              <input type="text" id="f-token" placeholder="123456:AA...">
+            </label>
+            <label class="field">允许使用的用户 ID（逗号分隔，可留空）
+              <input type="text" id="f-admin-ids" placeholder="留空 = 第一个使用者自动成为主人">
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>启动与行为</h2>
+          <div class="switch-row">
+            <div><div class="name">开机自动启动</div><div class="desc">登录 Windows 后在托盘自动运行</div></div>
+            <label class="switch"><input type="checkbox" id="f-autostart"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">打开程序时自动启动机器人</div><div class="desc">关闭后需要手动点「启动」</div></div>
+            <label class="switch"><input type="checkbox" id="f-autostart-bot"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">关闭窗口时最小化到托盘</div><div class="desc">关闭后点 × 将直接退出程序</div></div>
+            <label class="switch"><input type="checkbox" id="f-close-tray"><span></span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>维护</h2>
+          <p class="hint">排查问题或备份数据时用得到。</p>
+          <div class="toolbar">
+            <button class="btn" id="btn-open-root">打开程序目录</button>
+            <button class="btn" id="btn-open-data">打开数据目录</button>
+            <button class="btn" id="btn-diag-2">导出诊断包</button>
+          </div>
+          <p class="hint" style="margin-top:12px">备份：直接复制 <code>config.yaml</code> 和 <code>data\bot.db</code> 即可。</p>
+        </div>
+
+        <div class="card">
+          <h2>关于</h2>
+          <div class="about-row"><span>版本</span><b id="about-version">0.0.1</b></div>
+          <div class="about-row"><span>许可证</span><b>MIT</b></div>
+          <div class="about-row"><span>项目</span><b>翻译机器人 · Translator Bot</b></div>
+          <p class="hint" style="margin-top:12px">自动更新需要在 <code>config.yaml</code> 里填写 <code>update.repo</code>（格式 owner/repo）。</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

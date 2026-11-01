@@ -1,0 +1,56 @@
+# ============================================================
+#  翻译机器人 · 配置示例
+#  复制为 config.yaml 后填写自己的 Token 和 Key
+# ============================================================
+
+version: 0.0.1
+
+telegram:
+  token: "123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  admin_ids: []
+
+models:
+  - id: deepseek-pro
+    name: DeepSeek V4 Pro
+    base_url: https://api.deepseek.com/v1
+    api_key: sk-xxxxxxxxxxxxxxxxxxxxxxxx
+    model: deepseek-v4-pro
+    kind: text
+    default: true
+
+  - id: local-ollama
+    name: 本地 Ollama
+    base_url: http://127.0.0.1:11434/v1
+    api_key: ollama
+    model: qwen2.5:7b
+    kind: text
+    default: false
+
+languages:
+  mine: zh          # 我的语言
+  partners:         # 对方语言，第一个是默认回复语言
+    - ko
+    - ja
+    - en
+
+features:
+  bilingual: true        # 双语对照
+  tone_buttons: true     # 更正式/更口语/直译
+  explain_button: true   # 解释一下
+  glossary: true         # /glossary 命令
+  context: true          # 上下文记忆
+  cache: true            # 结果缓存
+  auto_detect: true      # 自动识别语种
+  group_mode: reply_or_mention   # all | mention | reply_or_mention
+  max_input_chars: 6000
+  history_size: 3
+
+prompts:
+  translation: ""   # 留空使用内置默认
+  explain: ""
+
+update:
+  enabled: true
+  repo: ""          # owner/repo，填写后才能检查更新
+
+proxy: ""           # 例如 http://127.0.0.1:7890
