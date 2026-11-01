@@ -36,22 +36,12 @@ jobs:
           python -m PyInstaller --noconfirm --clean --onefile --windowed
           --name updater --distpath dist updater_entry.py
 
-      - name: Install Rust (GNU toolchain, no Visual Studio)
+      - name: Ensure Rust (MSVC toolchain, preinstalled on windows-latest)
         shell: pwsh
         run: |
-          Invoke-WebRequest `
-            -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe" `
-            -OutFile "$env:RUNNER_TEMP\rustup-init.exe"
-          & "$env:RUNNER_TEMP\rustup-init.exe" -y --default-toolchain stable-x86_64-pc-windows-gnu --profile minimal
-          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-
-      - name: Install w64devkit (linker/assembler)
-        shell: pwsh
-        run: |
-          Invoke-WebRequest `
-            -Uri "https://github.com/skeeto/w64devkit/releases/download/v2.11.0/w64devkit-x64-2.11.0.7z.exe" `
-            -OutFile "$env:RUNNER_TEMP\w64devkit.exe"
-          & "$env:RUNNER_TEMP\w64devkit.exe" -y -oC:\Temp\w64devkit
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo --version
 
       - name: Assemble package directory
         shell: pwsh
@@ -62,7 +52,7 @@ jobs:
 
       - name: Build Rust host
         shell: pwsh
-        run: .\build-host.ps1
+        run: .\build-host.ps1 -Msvc
 
       - name: Fetch WebView2Loader
         shell: pwsh
