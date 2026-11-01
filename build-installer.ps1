@@ -48,7 +48,7 @@ if ($LASTEXITCODE -ne 0) { throw "heat 失败" }
 if ($LASTEXITCODE -ne 0) { throw "candle 失败" }
 
 $msi = Join-Path $repo "dist\TranslatorBot-Setup-$Version.msi"
-& $light -nologo -ext WixUIExtension -loc "$repo\installer\zh-cn.wxl" -sval -o $msi "$obj\Product.wixobj" "$obj\backend.wixobj"
+& $light -nologo -ext WixUIExtension -loc "$repo\installer\zh-cn.wxl" -loc "$repo\installer\WixUI_zh-CN.wxl" -sval -o $msi "$obj\Product.wixobj" "$obj\backend.wixobj"
 if ($LASTEXITCODE -ne 0) { throw "light 失败" }
 
 Write-Host ("生成: {0} ({1:N1} MB)" -f $msi, ((Get-Item $msi).Length / 1MB))
