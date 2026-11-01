@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.0.5
+
+### 修复
+
+- 安装目录里的 `WebView2Loader.dll` 已去掉（加载器已静态链接进 exe）
+- 可执行文件改名为 `TranslatorBot.exe`，不再叫 `translatorbot-app.exe`
+- 安装目录彻底干净：只剩 `TranslatorBot.exe` 和 `uninstall.exe`
+
 ## 0.0.4
 
 ### 新增

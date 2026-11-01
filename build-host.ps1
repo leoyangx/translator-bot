@@ -63,7 +63,7 @@ try {
 }
 
 $target = "C:\Temp\tauri-target\release"
-$exe = Join-Path $target "translatorbot-app.exe"
+$exe = Join-Path $target "TranslatorBot.exe"
 if (-not (Test-Path $exe)) { throw "未找到产物：$exe" }
 New-Item -ItemType Directory -Force "$repo\dist\TranslatorBot" | Out-Null
 Copy-Item $exe "$repo\dist\TranslatorBot\TranslatorBot.exe" -Force

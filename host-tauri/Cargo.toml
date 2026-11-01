@@ -1,12 +1,16 @@
 [package]
 name = "translatorbot-app"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 description = "Translation bot desktop shell"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[[bin]]
+name = "TranslatorBot"
+path = "src/main.rs"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
