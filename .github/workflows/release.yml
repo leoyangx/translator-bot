@@ -83,6 +83,7 @@ jobs:
                       z.write(p, p.relative_to(root).as_posix())
           digest = hashlib.sha256(target.read_bytes()).hexdigest()
           Path("dist/zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
+          Path("dist/checksums.txt").write_text(f"{digest}  {target.name}\n", encoding="ascii")
 
       - name: Install Inno Setup
         shell: pwsh
@@ -133,7 +134,6 @@ jobs:
           $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
           $zipLine = Get-Content "dist\zip.sha256"
           @($zipLine, "$hash  $($setup.Name)") | Set-Content -Path "dist/checksums.txt" -Encoding ascii
-
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
