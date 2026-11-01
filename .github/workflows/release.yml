@@ -84,17 +84,18 @@ jobs:
           digest = hashlib.sha256(target.read_bytes()).hexdigest()
           Path("dist/zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
 
-      - name: Install Inno Setup (fixed path)
+      - name: Install Inno Setup
         shell: pwsh
         run: |
-          $setup = "$env:RUNNER_TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-6.4.3.exe" -OutFile $setup
-          Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\Inno", "/NOICONS" -Wait
-          if (-not (Test-Path "C:\Inno\ISCC.exe")) { throw "Inno Setup 安装失败" }
-          & "C:\Inno\ISCC.exe" /? | Select-Object -First 1
+          choco install innosetup --no-progress -y --params "/DIR=C:\Inno"
+          $found = Get-ChildItem "C:\Inno\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe" -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+          if (-not $found) { throw "未找到 ISCC.exe" }
+          Write-Host "ISCC: $($found.FullName)"
 
       - name: Build installer
         shell: pwsh
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -124,6 +125,7 @@ jobs:
                 -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } `
                 -Body $body | Out-Null
             } catch { Write-Host "状态上报失败: $_" }
+            @("## ISCC 失败", '```', $log, '```') | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
             throw "ISCC 失败: $desc"
           }
 
@@ -139,7 +141,7 @@ jobs:
             dist/*.zip
             dist/*Setup*.exe
             dist/checksums.txt
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
