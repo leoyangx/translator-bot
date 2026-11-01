@@ -87,8 +87,37 @@ jobs:
 
       - name: Build installer
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer.iss"
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+                     Select-Object -First 1).FullName
+          }
+          if (-not $iscc) { throw "找不到 ISCC.exe" }
+          Write-Host "ISCC: $iscc"
+
+          $log = & $iscc "installer.iss" 2>&1 | Out-String
+          Write-Host $log
+          if ($LASTEXITCODE -ne 0) {
+            $line = ($log -split "`r?`n" | Where-Object { $_ -match "Error|错误" } | Select-Object -First 1)
+            if (-not $line) { $line = ($log -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 1) }
+            $desc = $line.Trim()
+            if ($desc.Length -gt 130) { $desc = $desc.Substring(0, 130) }
+            $body = @{ state = "error"; context = "iscc"; description = $desc } | ConvertTo-Json
+            try {
+              Invoke-RestMethod -Method Post `
+                -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" `
+                -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } `
+                -Body $body | Out-Null
+            } catch { Write-Host "状态上报失败: $_" }
+            throw "ISCC 失败: $desc"
+          }
+
           $setup = Get-ChildItem "dist\TranslatorBot-Setup-*.exe" | Select-Object -First 1
           $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
           $zipLine = Get-Content "dist\zip.sha256"
