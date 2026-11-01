@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -82,8 +84,14 @@ jobs:
           digest = hashlib.sha256(target.read_bytes()).hexdigest()
           Path("dist/zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
 
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
+      - name: Install Inno Setup (fixed path)
+        shell: pwsh
+        run: |
+          $setup = "$env:RUNNER_TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-6.4.3.exe" -OutFile $setup
+          Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\Inno", "/NOICONS" -Wait
+          if (-not (Test-Path "C:\Inno\ISCC.exe")) { throw "Inno Setup 安装失败" }
+          & "C:\Inno\ISCC.exe" /? | Select-Object -First 1
 
       - name: Build installer
         shell: pwsh
@@ -91,11 +99,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $iscc = @(
+            "C:\Inno\ISCC.exe",
             "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
             "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $iscc) {
-            $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+            $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe", "C:\Inno\ISCC.exe" -ErrorAction SilentlyContinue |
                      Select-Object -First 1).FullName
           }
           if (-not $iscc) { throw "找不到 ISCC.exe" }
@@ -130,6 +139,7 @@ jobs:
             dist/*.zip
             dist/*Setup*.exe
             dist/checksums.txt
+          fail_on_unmatched_files: true
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
