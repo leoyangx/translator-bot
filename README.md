@@ -5,7 +5,7 @@
 
 ![界面截图](docs/screenshot.png)
 
-> 架构：Tauri 2（Rust）+ 系统 WebView2 + Python 后端。不打包浏览器内核，安装包 17 MB，解压后约 38 MB。
+> 架构：Tauri 2（Rust）+ 系统 WebView2 + Python 后端。不打包浏览器内核，安装包 29 MB，装完占用约 45 MB，安装目录只有 2 个文件。
 
 ## 特性
 
@@ -22,13 +22,17 @@
 
 ### 方式一：安装包（推荐）
 
-1. 下载 `TranslatorBot-Setup-0.0.1.exe`
-2. 双击运行，**安装目录可以自己选**（默认装在当前用户目录，不需要管理员权限）
-3. 安装完成会自动启动，开始菜单和桌面都有快捷方式
+1. 下载 `TranslatorBot-Setup-0.0.2.msi`
+2. 双击运行，**不需要管理员权限**，装到当前用户目录
+3. 装完后安装目录里只有 `TranslatorBot.exe` 和 `Uninstall TranslatorBot` 两个文件
+4. 开始菜单有快捷方式，程序和数据都在 `%LOCALAPPDATA%`
+
+> 卸载：直接双击安装目录里的 `Uninstall TranslatorBot`，或在「设置 → 应用」里卸载。
+> 配置和日志在 `%LOCALAPPDATA%\TranslatorBot\`，卸载后保留，重装可继续用。
 
 ### 方式二：绿色版
 
-1. 下载 `TranslatorBot-v0.0.1-win64.zip`，解压到**英文路径**
+1. 下载 `TranslatorBot-v0.0.2-win64.zip`，解压到**英文路径**
 2. 双击 `TranslatorBot.exe`（**不要改文件名**，中文名会导致内核崩溃）
 
 ### 首次配置
@@ -44,7 +48,7 @@ git clone https://github.com/<owner>/<repo>.git
 cd <repo>
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python -m app.console.window
+.venv\Scripts\python -m app.console.serve
 ```
 
 ## 界面
@@ -98,12 +102,13 @@ features:
 git tag v0.0.2 && git push origin v0.0.2
 ```
 
-GitHub Actions 会自动构建并上传 `TranslatorBot-v0.0.2-win64.zip` + `checksums.txt`。
+GitHub Actions 会自动构建并上传 `TranslatorBot-v0.0.2-win64.zip`、`TranslatorBot-Setup-0.0.2.msi` 和 `checksums.txt`。
 
 ## 开发
 
 ```
 host-tauri/     Rust 宿主（Tauri 2 + 系统 WebView2）：单开、托盘、拉起后端
+installer/      WiX 安装包定义（Product.wxs + 中文语言包）
 app/
 ├─ core/        语言识别、提示词、翻译编排
 ├─ providers/   OpenAI 兼容适配
@@ -116,7 +121,7 @@ app/
 运行机器人（无界面）：`python -m app.main`
 运行后端服务：`python -m app.console.serve`
 
-打包分两步：
+打包分三步：
 
 ```powershell
 # 1. 后端（PyInstaller，约 34 MB）
@@ -125,18 +130,27 @@ python -m PyInstaller --noconfirm --windowed --name TranslatorBotBackend ^
   --collect-all langdetect run.py
 
 # 2. 宿主（Tauri / Rust，约 3.5 MB）
-.\build-host.ps1
+powershell -ExecutionPolicy Bypass -File .\build-host.ps1
+
+# 3. MSI 安装包（WiX 3.14，约 29 MB）
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Version 0.0.2
 ```
 
-宿主构建依赖：`rustup`（`stable-x86_64-pc-windows-gnu`）+ [w64devkit](https://github.com/skeeto/w64devkit) 解压到 `C:\Temp\w64devkit`，无需 Visual Studio。
+宿主构建依赖：`rustup`（`stable-x86_64-pc-windows-gnu`）+ [w64devkit](https://github.com/skeeto/w64devkit) 解压到 `C:\Temp\w64devkit`，无需 Visual Studio；CI 上用 MSVC 工具链（`build-host.ps1 -Msvc`）。
 `build-host.ps1` 会自动镜像到英文路径再编译（中文路径会让 `windres` 失败）。
 
-最终目录只有三项：
+安装布局（装完后用户只看到前两项）：
 
 ```
-TranslatorBot.exe           宿主（Tauri + WebView2）
-WebView2Loader.dll          WebView2 加载器
-backend\                    后端程序、_internal
+%LOCALAPPDATA%\Programs\TranslatorBot\
+├─ TranslatorBot.exe          宿主
+└─ Uninstall TranslatorBot    卸载快捷方式（1 KB）
+
+%LOCALAPPDATA%\TranslatorBot\
+├─ app\backend\               后端程序
+├─ data\                      数据库与缓存
+├─ logs\                      日志
+└─ config.yaml                配置
 ```
 
 ## 常见问题

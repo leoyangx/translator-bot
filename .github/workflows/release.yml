@@ -45,103 +45,53 @@ jobs:
           rustup default stable
           cargo --version
 
-      - name: Assemble package directory
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force "dist/TranslatorBot/backend" | Out-Null
-          Copy-Item "dist/TranslatorBotBackend/*" "dist/TranslatorBot/backend/" -Recurse -Force
-          Copy-Item "dist/updater.exe" "dist/TranslatorBot/backend/updater.exe" -Force
-
       - name: Build Rust host
         shell: pwsh
-        run: .\build-host.ps1 -Msvc
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build-host.ps1 -Msvc
 
-      - name: Fetch WebView2Loader
+      - name: Build MSI installer
         shell: pwsh
         run: |
-          $index = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/index.json"
-          $version = ($index.versions | Where-Object { $_ -notmatch "-" } | Select-Object -Last 1)
-          $nupkg = "$env:RUNNER_TEMP\webview2.zip"
-          Invoke-WebRequest `
-            -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$version/microsoft.web.webview2.$version.nupkg" `
-            -OutFile $nupkg
-          Expand-Archive $nupkg -DestinationPath "$env:RUNNER_TEMP\webview2" -Force
-          Copy-Item "$env:RUNNER_TEMP\webview2\build\native\x64\WebView2Loader.dll" "dist/TranslatorBot/WebView2Loader.dll" -Force
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1 -Version $version
+          $msi = Get-ChildItem "dist\TranslatorBot-Setup-*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "没有生成 MSI" }
+          Write-Host "MSI: $($msi.Name) ($([math]::Round($msi.Length/1MB,1)) MB)"
 
-      - name: Create zip (UTF-8 filenames)
+      - name: Create portable zip
         shell: python
         run: |
           import hashlib, os, zipfile
           from pathlib import Path
 
-          root = Path("dist/TranslatorBot")
           version = os.environ["GITHUB_REF_NAME"].lstrip("v")
           target = Path(f"dist/TranslatorBot-v{version}-win64.zip")
           with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-              for p in sorted(root.rglob("*")):
+              z.write("dist/TranslatorBot/TranslatorBot.exe", "TranslatorBot.exe")
+              backend = Path("dist/TranslatorBotBackend")
+              for p in sorted(backend.rglob("*")):
                   if p.is_file():
-                      z.write(p, p.relative_to(root).as_posix())
+                      z.write(p, ("backend/" + p.relative_to(backend).as_posix()))
           digest = hashlib.sha256(target.read_bytes()).hexdigest()
           Path("dist/zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
-          Path("dist/checksums.txt").write_text(f"{digest}  {target.name}\n", encoding="ascii")
 
-      - name: Install Inno Setup
+      - name: Write checksums
         shell: pwsh
         run: |
-          choco install innosetup --no-progress -y --params "/DIR=C:\Inno"
-          $found = Get-ChildItem "C:\Inno\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe" -ErrorAction SilentlyContinue |
-                   Select-Object -First 1
-          if (-not $found) { throw "未找到 ISCC.exe" }
-          Write-Host "ISCC: $($found.FullName)"
+          $lines = @(Get-Content "dist\zip.sha256")
+          $msi = Get-ChildItem "dist\TranslatorBot-Setup-*.msi" | Select-Object -First 1
+          $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
+          $lines += "$hash  $($msi.Name)"
+          $lines | Set-Content -Path "dist/checksums.txt" -Encoding ascii
 
-      - name: Build installer
-        shell: pwsh
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $iscc = @(
-            "C:\Inno\ISCC.exe",
-            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $iscc) {
-            $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe", "C:\Inno\ISCC.exe" -ErrorAction SilentlyContinue |
-                     Select-Object -First 1).FullName
-          }
-          if (-not $iscc) { throw "找不到 ISCC.exe" }
-          Write-Host "ISCC: $iscc"
-
-          $log = & $iscc "installer.iss" 2>&1 | Out-String
-          Write-Host $log
-          if ($LASTEXITCODE -ne 0) {
-            $line = ($log -split "`r?`n" | Where-Object { $_ -match "Error|错误" } | Select-Object -First 1)
-            if (-not $line) { $line = ($log -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 1) }
-            $desc = $line.Trim()
-            if ($desc.Length -gt 130) { $desc = $desc.Substring(0, 130) }
-            $body = @{ state = "error"; context = "iscc"; description = $desc } | ConvertTo-Json
-            try {
-              Invoke-RestMethod -Method Post `
-                -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" `
-                -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } `
-                -Body $body | Out-Null
-            } catch { Write-Host "状态上报失败: $_" }
-            @("## ISCC 失败", '```', $log, '```') | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            throw "ISCC 失败: $desc"
-          }
-
-          $setup = Get-ChildItem "dist\TranslatorBot-Setup-*.exe" | Select-Object -First 1
-          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
-          $zipLine = Get-Content "dist\zip.sha256"
-          @($zipLine, "$hash  $($setup.Name)") | Set-Content -Path "dist/checksums.txt" -Encoding ascii
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.zip
-            dist/*Setup*.exe
+            dist/*.msi
             dist/checksums.txt
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

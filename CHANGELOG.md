@@ -1,5 +1,15 @@
 # 更新日志
 
+## 0.0.2
+
+### 变更
+
+- 安装包由 Inno Setup 换成 **WiX MSI**：装完后安装目录只有 `TranslatorBot.exe` 和卸载快捷方式两个文件，不再像目录
+- 后端与运行数据移到 `%LOCALAPPDATA%\TranslatorBot\`：安装目录干净，卸载不留程序文件
+- 去掉 `WebView2Loader.dll`：Tauri 把加载器静态链接进 exe，少一个文件
+- 绿色版精简为 `TranslatorBot.exe` + `backend\`
+- 卸载入口支持「设置 → 应用」和安装目录里的快捷方式
+
 ## 0.0.1
 
 首个公开版本。

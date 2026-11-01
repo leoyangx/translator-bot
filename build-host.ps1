@@ -1,4 +1,4 @@
-# 构建 Tauri 宿主（Rust）
+﻿# 构建 Tauri 宿主（Rust）
 # 本地（无 Visual Studio）：默认走 GNU 工具链，需要 rustup 的 stable-x86_64-pc-windows-gnu + w64devkit
 # CI（windows-latest 自带 VS）：加 -Msvc 用 MSVC 工具链，最稳
 # 说明：项目路径含中文时 windres/rc 会失败，脚本会先镜像到纯英文目录再构建。

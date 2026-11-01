@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 翻译机器人 · WiX MSI 安装包定义
+     程序目录：%LOCALAPPDATA%\Programs\TranslatorBot（只放 exe + 卸载快捷方式）
+     负载目录：%LOCALAPPDATA%\TranslatorBot\app\backend（后端，用户看不到）
+     说明：用 32 位包模板，Windows Installer 才允许 per-user 安装（无需管理员）
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="!(loc.ProductName)"
+           Language="2052"
+           Version="$(var.ProductVersion)"
+           Manufacturer="TranslatorBot"
+           UpgradeCode="8F3C2A61-7B4E-4D2A-9C11-5A6E7F0B1D23">
+
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perUser"
+             InstallPrivileges="limited" />
+
+    <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeMsg)" AllowSameVersionUpgrades="yes" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Icon Id="AppIcon" SourceFile="$(var.StageDir)\TranslatorBot.exe" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsDir" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="TranslatorBot">
+            <Component Id="MainExecutable" Guid="{B1A7C3D2-6E41-4C8A-9F55-2D3E7A9C1B42}">
+              <File Id="TranslatorBotExe"
+                    Source="$(var.StageDir)\TranslatorBot.exe"
+                    KeyPath="yes" />
+            </Component>
+            <Component Id="UninstallShortcut" Guid="{E4D0F6A5-9164-4FBD-C288-5A6B0D2F4E75}">
+              <Shortcut Id="UninstallLink"
+                        Name="Uninstall TranslatorBot"
+                        Description="!(loc.UninstallDesc)"
+                        Target="[SystemFolder]msiexec.exe"
+                        Arguments="/x [ProductCode]" />
+              <RegistryValue Root="HKCU" Key="Software\TranslatorBot" Name="UninstallShortcut" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+          </Directory>
+        </Directory>
+
+        <Directory Id="DataRootDir" Name="TranslatorBot">
+          <Directory Id="AppPayloadDir" Name="app">
+            <Directory Id="BackendDir" Name="backend" />
+          </Directory>
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="AppMenuDir" Name="!(loc.AppMenuName)">
+          <Component Id="StartMenuShortcut" Guid="{C2B8D4E3-7F52-4D9B-A066-3E4F8B0D2C53}">
+            <Shortcut Id="StartMenuLink"
+                      Name="!(loc.AppMenuName)"
+                      Description="!(loc.AppDesc)"
+                      Target="[INSTALLFOLDER]TranslatorBot.exe"
+                      WorkingDirectory="INSTALLFOLDER" />
+            <RemoveFolder Id="RemoveAppMenuDir" On="uninstall" />
+            <RegistryValue Root="HKCU" Key="Software\TranslatorBot" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Main" Title="!(loc.FeatureTitle)" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="UninstallShortcut" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentGroupRef Id="BackendFiles" />
+    </Feature>
+  </Product>
+</Wix>

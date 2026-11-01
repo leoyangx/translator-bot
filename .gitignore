@@ -3,6 +3,9 @@ config.yaml
 config.yaml.bak
 .env
 
+# 个人笔记（不上传）
+PROJECT-STRUCTURE.md
+
 # 运行时数据
 data/
 logs/

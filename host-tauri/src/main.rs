@@ -1,4 +1,4 @@
-﻿// 翻译机器人 · Tauri 宿主
+// 翻译机器人 · Tauri 宿主
 // 单实例 + 拉起 Python 后端 + 系统 WebView2 窗口 + 托盘
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -43,12 +43,28 @@ fn log_line(root: &Path, msg: &str) {
     }
 }
 
-fn start_backend(root: &Path) -> Option<Child> {
-    let exe = root.join("backend").join("TranslatorBotBackend.exe");
-    log_line(root, &format!("backend: {}", exe.display()));
-    Command::new(&exe)
-        .current_dir(root)
-        .env("TRANSLATORBOT_HOME", root)
+/// 安装版：程序在 %LOCALAPPDATA%\Programs\TranslatorBot，负载与数据在 %LOCALAPPDATA%\TranslatorBot
+/// 绿色版：exe 与 backend\ 同目录。返回 (数据根目录, 后端 exe)
+fn resolve_paths(exe_dir: &Path) -> (PathBuf, PathBuf) {
+    if let Ok(local) = env::var("LOCALAPPDATA") {
+        let base = PathBuf::from(local).join("TranslatorBot");
+        let backend = base
+            .join("app")
+            .join("backend")
+            .join("TranslatorBotBackend.exe");
+        if backend.exists() {
+            return (base, backend);
+        }
+    }
+    let backend = exe_dir.join("backend").join("TranslatorBotBackend.exe");
+    (exe_dir.to_path_buf(), backend)
+}
+
+fn start_backend(home: &Path, backend: &Path) -> Option<Child> {
+    log_line(home, &format!("backend: {}", backend.display()));
+    Command::new(backend)
+        .current_dir(home)
+        .env("TRANSLATORBOT_HOME", home)
         .spawn()
         .ok()
 }
@@ -79,10 +95,11 @@ fn main() {
             }
         }))
         .setup(|app| {
-            let root = root_dir();
+            let exe_dir = root_dir();
+            let (root, backend) = resolve_paths(&exe_dir);
             log_line(&root, "Tauri 宿主启动");
 
-            let child = start_backend(&root).ok_or("后端启动失败")?;
+            let child = start_backend(&root, &backend).ok_or("后端启动失败")?;
             let url = wait_for_port(&root, Duration::from_secs(30)).ok_or("后端未就绪")?;
             log_line(&root, &format!("backend ready: {}", url));
             app.manage(Backend(Mutex::new(Some(child))));
