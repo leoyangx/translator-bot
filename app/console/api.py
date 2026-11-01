@@ -372,13 +372,27 @@ class ConsoleApi:
         startup = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
         return startup / "TranslatorBot.lnk"
 
+    def _host_exe(self) -> Path:
+        """开机自启要拉起窗口宿主，而不是后端。"""
+        if getattr(sys, "frozen", False):
+            # 绿色版：backend\TranslatorBotBackend.exe → 上级目录的 TranslatorBot.exe
+            portable = Path(sys.executable).resolve().parent.parent / "TranslatorBot.exe"
+            if portable.exists():
+                return portable
+            # 安装版：程序在 %LOCALAPPDATA%\Programs\TranslatorBot
+            local = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "TranslatorBot" / "TranslatorBot.exe"
+            if local.exists():
+                return local
+            return Path(sys.executable)
+        return self.root / ".venv" / "Scripts" / "pythonw.exe"
+
     def _create_startup_link(self, link: Path) -> None:
         if getattr(sys, "frozen", False):
-            target = sys.executable
+            target = self._host_exe()
             args = ""
         else:
-            target = str(self.root / ".venv" / "Scripts" / "pythonw.exe")
-            args = "-m app.console.qt_window"
+            target = self._host_exe()
+            args = "-m app.console.serve"
         ps = (
             "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');"
             "$s.TargetPath='%s';$s.Arguments='%s';$s.WorkingDirectory='%s';$s.Save()"
