@@ -1,15 +1,25 @@
 # 更新日志
 
+## 0.0.3
+
+### 新增
+
+- **译文代码块**：译文放进代码块，手机点一下、桌面点复制图标即可复制；功能页可开关（默认开）
+
 ## 0.0.2
 
 ### 变更
 
-- 安装包由 Inno Setup 换成 **WiX MSI**：装完后安装目录只有 `TranslatorBot.exe` 和卸载快捷方式两个文件，不再像目录
+- 安装包由 Inno Setup 换成 **WiX MSI**：装完后安装目录只有 `TranslatorBot.exe` 和卸载快捷方式两个文件
 - 后端与运行数据移到 `%LOCALAPPDATA%\TranslatorBot\`：安装目录干净，卸载不留程序文件
 - 去掉 `WebView2Loader.dll`：Tauri 把加载器静态链接进 exe，少一个文件
 - 绿色版精简为 `TranslatorBot.exe` + `backend\`
 - 安装包有完整向导（欢迎页 / 许可 / 选择目录 / 安装 / 完成），界面为中文，不再是静默一闪
 - 卸载入口支持「设置 → 应用」和安装目录里的快捷方式
+
+### 修复
+
+- 开机自启之前指向后端进程，导致只起服务不开窗口
 
 ## 0.0.1
 
@@ -32,7 +42,7 @@
 ### 技术
 
 - Tauri 2（Rust）宿主窗口 + 系统 WebView2 + Python 后端
-- 不打包浏览器内核：安装包 17 MB，解压后约 38 MB
+- 不打包浏览器内核：安装包约 30 MB，装后占用约 45 MB
 - 后端用 PyInstaller 打包（约 34 MB），由宿主拉起，通过本机 HTTP 通信
 - 宿主为单文件（约 3.5 MB），原生 DPI（PerMonitorV2）
 - aiogram 3 长轮询，无需公网 IP；SQLite 本地存储

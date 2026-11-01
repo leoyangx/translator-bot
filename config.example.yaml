@@ -35,6 +35,7 @@ languages:
 
 features:
   bilingual: true        # 双语对照
+  copy_block: true       # 译文放进代码块，点一下即可复制
   tone_buttons: true     # 更正式/更口语/直译
   explain_button: true   # 解释一下
   glossary: true         # /glossary 命令

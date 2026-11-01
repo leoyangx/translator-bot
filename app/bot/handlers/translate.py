@@ -122,7 +122,11 @@ async def on_text(
         config.features.explain_button and result.src_lang != mine and result.src_lang != "auto"
     )
     parts = split_text(
-        render_translation(result, show_source=config.features.bilingual)
+        render_translation(
+            result,
+            show_source=config.features.bilingual,
+            copy_block=config.features.copy_block,
+        )
     )
     keyboard = result_keyboard(
         pending_id, tones=config.features.tone_buttons, explain=show_explain
@@ -175,7 +179,11 @@ async def on_tone(
         and result.src_lang != "auto"
     )
     await callback.message.edit_text(
-        render_translation(result, show_source=config.features.bilingual),
+        render_translation(
+            result,
+            show_source=config.features.bilingual,
+            copy_block=config.features.copy_block,
+        ),
         reply_markup=result_keyboard(
             new_id, tones=config.features.tone_buttons, explain=show_explain
         )

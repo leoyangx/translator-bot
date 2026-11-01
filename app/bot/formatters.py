@@ -24,7 +24,9 @@ def direction_label(t: Translation) -> str:
     return f"{src} → {tgt}"
 
 
-def render_translation(t: Translation, *, show_source: bool = True) -> str:
+def render_translation(
+    t: Translation, *, show_source: bool = True, copy_block: bool = False
+) -> str:
     head = f"<b>{direction_label(t)}</b> · {TONE_NAMES.get(t.tone, t.tone)}"
     if t.cached:
         head += " · 缓存"
@@ -32,7 +34,10 @@ def render_translation(t: Translation, *, show_source: bool = True) -> str:
     blocks = [head]
     if show_source:
         blocks.append(f"<blockquote>{html.escape(t.source_text)}</blockquote>")
-    blocks.append(html.escape(t.target_text))
+    target = html.escape(t.target_text)
+    if copy_block:
+        target = f"<pre>{target}</pre>"
+    blocks.append(target)
     return "\n\n".join(blocks)
 
 

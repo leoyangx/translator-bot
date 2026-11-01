@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.0.2"
+APP_VERSION = "0.0.3"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
 
@@ -44,6 +44,7 @@ class LanguagesConfig:
 @dataclass(slots=True)
 class FeaturesConfig:
     bilingual: bool = True
+    copy_block: bool = True
     tone_buttons: bool = True
     explain_button: bool = True
     glossary: bool = True
@@ -167,6 +168,7 @@ def config_from_dict(raw: dict[str, Any]) -> Config:
         ),
         features=FeaturesConfig(
             bilingual=bool(feat_raw.get("bilingual", legacy_tr.get("bilingual", True))),
+            copy_block=bool(feat_raw.get("copy_block", True)),
             tone_buttons=bool(feat_raw.get("tone_buttons", True)),
             explain_button=bool(feat_raw.get("explain_button", True)),
             glossary=bool(feat_raw.get("glossary", True)),

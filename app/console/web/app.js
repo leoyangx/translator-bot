@@ -123,6 +123,7 @@ function renderModels() {
 function renderFeatures() {
   const f = S.config.features || {};
   $("#f-bilingual").checked = !!f.bilingual;
+  $("#f-copyblock").checked = f.copy_block !== false;
   $("#f-tone").checked = !!f.tone_buttons;
   $("#f-explain").checked = !!f.explain_button;
   $("#f-context").checked = !!f.context;
@@ -352,6 +353,7 @@ function collect() {
     languages: { mine: $("#f-my-lang").value, partners },
     features: {
       bilingual: $("#f-bilingual").checked,
+      copy_block: $("#f-copyblock").checked,
       tone_buttons: $("#f-tone").checked,
       explain_button: $("#f-explain").checked,
       glossary: $("#f-glossary").checked,
