@@ -43,7 +43,7 @@ if (Test-Path "$repo\dist\updater.exe") { Copy-Item "$repo\dist\updater.exe" "$s
 if ($LASTEXITCODE -ne 0) { throw "heat 失败" }
 
 # 编译 / 链接
-& $candle -nologo -dStageDir="$stage" -dBackendSourceDir="$stage\backend" -dProductVersion="$Version" -out "$obj\" `
+& $candle -nologo -dStageDir="$stage" -dBackendSourceDir="$stage\backend" -dProductVersion="$Version" -dLicenseRtf="$repo\installer\license.rtf" -out "$obj\" `
     "$repo\installer\Product.wxs" "$obj\backend.wxs"
 if ($LASTEXITCODE -ne 0) { throw "candle 失败" }
 

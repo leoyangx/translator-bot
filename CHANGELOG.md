@@ -8,6 +8,7 @@
 - 后端与运行数据移到 `%LOCALAPPDATA%\TranslatorBot\`：安装目录干净，卸载不留程序文件
 - 去掉 `WebView2Loader.dll`：Tauri 把加载器静态链接进 exe，少一个文件
 - 绿色版精简为 `TranslatorBot.exe` + `backend\`
+- 安装包有完整向导（欢迎页 / 许可 / 选择目录 / 安装 / 完成），不再是静默一闪
 - 卸载入口支持「设置 → 应用」和安装目录里的快捷方式
 
 ## 0.0.1

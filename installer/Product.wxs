@@ -21,6 +21,9 @@
     <MediaTemplate EmbedCab="yes" />
 
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <UIRef Id="WixUI_InstallDir" />
     <Icon Id="AppIcon" SourceFile="$(var.StageDir)\TranslatorBot.exe" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
