@@ -33,63 +33,69 @@ jobs:
           --collect-all langdetect
           run.py
 
-      - name: Build updater
-        run: >
-          python -m PyInstaller --noconfirm --clean --onefile --windowed
-          --name updater --distpath dist updater_entry.py
-
-      - name: Ensure Rust (MSVC toolchain, preinstalled on windows-latest)
+      - name: Install Rust
         shell: pwsh
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
           cargo --version
 
-      - name: Build Rust host
+      - name: Install Tauri CLI
         shell: pwsh
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build host and NSIS installer
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build-host.ps1 -Msvc
 
-      - name: Build MSI installer
+      - name: Assemble release files
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1 -Version $version
-          $msi = Get-ChildItem "dist\TranslatorBot-Setup-*.msi" | Select-Object -First 1
-          if (-not $msi) { throw "没有生成 MSI" }
-          Write-Host "MSI: $($msi.Name) ($([math]::Round($msi.Length/1MB,1)) MB)"
+          $setup = Get-ChildItem "dist\*_x64-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "没有找到 NSIS 安装包" }
+          $sig = "$($setup.FullName).sig"
+          if (-not (Test-Path $sig)) { throw "没有找到签名文件" }
 
-      - name: Create portable zip
-        shell: python
-        run: |
-          import hashlib, os, zipfile
-          from pathlib import Path
+          Copy-Item $setup.FullName "dist\TranslatorBot-Setup-$version.exe" -Force
+          $signature = (Get-Content $sig -Raw).Trim()
 
-          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
-          target = Path(f"dist/TranslatorBot-v{version}-win64.zip")
-          with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-              z.write("dist/TranslatorBot/TranslatorBot.exe", "TranslatorBot.exe")
-              backend = Path("dist/TranslatorBotBackend")
-              for p in sorted(backend.rglob("*")):
-                  if p.is_file():
-                      z.write(p, ("backend/" + p.relative_to(backend).as_posix()))
-          digest = hashlib.sha256(target.read_bytes()).hexdigest()
-          Path("dist/zip.sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
+          # 便携版：单文件 exe
+          Copy-Item "dist\TranslatorBot\TranslatorBot.exe" "dist\TranslatorBot-portable.exe" -Force
 
-      - name: Write checksums
-        shell: pwsh
-        run: |
-          $lines = @(Get-Content "dist\zip.sha256")
-          $msi = Get-ChildItem "dist\TranslatorBot-Setup-*.msi" | Select-Object -First 1
-          $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
-          $lines += "$hash  $($msi.Name)"
-          $lines | Set-Content -Path "dist/checksums.txt" -Encoding ascii
+          $latest = @{
+            version = $version
+            notes = "v$version"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $signature
+                url = "https://github.com/leoyangx/translator-bot/releases/download/${{ github.ref_name }}/TranslatorBot-Setup-$version.exe"
+              }
+            }
+          }
+          $latest | ConvertTo-Json -Depth 6 | Set-Content "dist\latest.json" -Encoding utf8
+
+          # 绿色版 zip（单文件）
+          Compress-Archive -Path "dist\TranslatorBot\TranslatorBot.exe" -DestinationPath "dist\TranslatorBot-v$version-win64.zip" -Force
+
+          $lines = @()
+          foreach ($f in @("dist\TranslatorBot-Setup-$version.exe", "dist\TranslatorBot-v$version-win64.zip")) {
+            $hash = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+            $lines += "$hash  $(Split-Path $f -Leaf)"
+          }
+          $lines | Set-Content "dist\checksums.txt" -Encoding ascii
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.zip
-            dist/*.msi
+            dist/TranslatorBot-Setup-*.exe
+            dist/TranslatorBot-v*-win64.zip
+            dist/latest.json
             dist/checksums.txt
           fail_on_unmatched_files: true
           generate_release_notes: true

@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.0.3"
+APP_VERSION = "0.0.4"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
 
@@ -66,6 +66,8 @@ class PromptsConfig:
 class UpdateConfig:
     enabled: bool = True
     repo: str = ""
+    mode: str = "auto"        # auto | direct | custom
+    custom_proxy: str = ""
 
 
 @dataclass(slots=True)
@@ -190,6 +192,8 @@ def config_from_dict(raw: dict[str, Any]) -> Config:
         update=UpdateConfig(
             enabled=bool(update_raw.get("enabled", True)),
             repo=str(update_raw.get("repo") or ""),
+            mode=str(update_raw.get("mode") or "auto"),
+            custom_proxy=str(update_raw.get("custom_proxy") or ""),
         ),
         app=AppConfig(
             close_to_tray=bool(app_raw.get("close_to_tray", True)),

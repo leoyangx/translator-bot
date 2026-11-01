@@ -356,13 +356,22 @@ function bindStatic() {
   $("#btn-check-update").addEventListener("click", async () => {
     const btn = $("#btn-check-update");
     btn.disabled = true;
-    const info = await api().check_update();
+    let info;
+    if (window.__TAURI__ && window.__TAURI__.core) {
+      try {
+        info = await window.__TAURI__.core.invoke("update_check");
+      } catch (e) {
+        info = { available: false, error: String(e) };
+      }
+    } else {
+      info = await api().check_update();
+    }
     btn.disabled = false;
     if (info.available) {
       renderUpdate(info);
       toast(`发现新版本 v${info.version}`, "ok");
     } else {
-      toast(info.reason || "已经是最新版本", "ok");
+      toast(info.error || info.reason || "已经是最新版本", info.error ? "err" : "ok");
     }
   });
 
@@ -370,6 +379,18 @@ function bindStatic() {
     const btn = $("#btn-do-update");
     btn.disabled = true;
     btn.textContent = "下载中…";
+    if (window.__TAURI__ && window.__TAURI__.core) {
+      try {
+        await window.__TAURI__.core.invoke("update_install");
+        toast("正在安装更新，程序会自动重启…", "ok");
+        return;
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "下载并更新";
+        toast(`更新失败：${e}`, "err");
+        return;
+      }
+    }
     const res = await api().apply_update();
     if (!res.ok) {
       btn.disabled = false;
@@ -453,7 +474,10 @@ function collect() {
       translation: tPrompt === (defaults.translation_prompt || "").trim() ? "" : tPrompt,
       explain: ePrompt === (defaults.explain_prompt || "").trim() ? "" : ePrompt,
     },
-    update: S.config.update || { enabled: true, repo: "" },
+    update: Object.assign({}, S.config.update || { enabled: true, repo: "" }, {
+      mode: $("#f-update-mode").value,
+      custom_proxy: $("#f-update-proxy").value.trim(),
+    }),
     app: {
       close_to_tray: $("#f-close-tray").checked,
       autostart_bot: $("#f-autostart-bot").checked,
@@ -539,6 +563,13 @@ async function loadAutostart() {
     $("#f-autostart").checked = !!(r && r.enabled);
   } catch (e) {}
   const app = S.config.app || {};
+  const upd = S.config.update || {};
+  $("#f-update-mode").value = upd.mode || "auto";
+  $("#f-update-proxy").value = upd.custom_proxy || "";
+  $("#f-update-proxy").disabled = ($("#f-update-mode").value !== "custom");
+  $("#f-update-mode").addEventListener("change", () => {
+    $("#f-update-proxy").disabled = ($("#f-update-mode").value !== "custom");
+  });
   $("#f-autostart-bot").checked = app.autostart_bot !== false;
   $("#f-close-tray").checked = app.close_to_tray !== false;
 }

@@ -325,8 +325,24 @@
         </div>
 
         <div class="card">
-          <h2>关于</h2>
-          <div class="about-row"><span>版本</span><b id="about-version">0.0.1</b></div>
+          <h2>更新</h2>
+          <p class="hint">检查更新时按这个顺序选线路：自定义节点 → 官方直连 → 公共镜像。</p>
+          <div class="grid-2">
+            <label class="field">下载线路
+              <select id="f-update-mode">
+                <option value="auto">自动（直连失败自动换镜像）</option>
+                <option value="direct">仅官方直连</option>
+                <option value="custom">自定义节点</option>
+              </select>
+            </label>
+            <label class="field">自定义节点（镜像前缀，如 https://gh-proxy.com/）
+              <input type="text" id="f-update-proxy" placeholder="https://gh-proxy.com/">
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>关于</h2>          <div class="about-row"><span>版本</span><b id="about-version">0.0.1</b></div>
           <div class="about-row"><span>许可证</span><b>MIT</b></div>
           <div class="about-row"><span>项目</span><b>翻译机器人 · Translator Bot</b></div>
           <p class="hint" style="margin-top:12px">自动更新需要在 <code>config.yaml</code> 里填写 <code>update.repo</code>（格式 owner/repo）。</p>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<WixLocalization Culture="zh-CN" Codepage="936" xmlns="http://schemas.microsoft.com/wix/2006/localization">
-  <String Id="ProductName">翻译机器人</String>
-  <String Id="FeatureTitle">翻译机器人</String>
-  <String Id="AppMenuName">翻译机器人</String>
-  <String Id="AppDesc">翻译机器人</String>
-  <String Id="UninstallDesc">卸载翻译机器人</String>
-  <String Id="DowngradeMsg">已经安装了更新版本的翻译机器人。</String>
-</WixLocalization>

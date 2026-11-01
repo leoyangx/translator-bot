@@ -1,38 +1,65 @@
 // 翻译机器人 · Tauri 宿主
-// 单实例 + 拉起 Python 后端 + 系统 WebView2 窗口 + 托盘
+// 单实例 + 内嵌后端解包 + 系统 WebView2 窗口 + 托盘 + 自动更新（多线路）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
     env, fs,
+    io::Cursor,
     path::{Path, PathBuf},
     process::{Child, Command},
     sync::Mutex,
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
+use serde::Serialize;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_updater::UpdaterExt;
 
 const ICON_PNG: &[u8] = include_bytes!("../../assets/icon-512.png");
+const BACKEND_ZIP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/backend.zip"));
 const TITLE: &str = "翻译机器人";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const GH_BASE: &str = "https://github.com/leoyangx/translator-bot/releases/latest/download/";
+const MIRRORS: [&str; 2] = [
+    "https://ghproxy.net/https://github.com/leoyangx/translator-bot/releases/latest/download/",
+    "https://gh-proxy.com/https://github.com/leoyangx/translator-bot/releases/latest/download/",
+];
 
 struct Backend(Mutex<Option<Child>>);
 
-fn root_dir() -> PathBuf {
+#[derive(Serialize)]
+struct UpdateInfo {
+    available: bool,
+    version: Option<String>,
+    notes: Option<String>,
+    error: Option<String>,
+}
+
+fn exe_dir() -> PathBuf {
     env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn log_line(root: &Path, msg: &str) {
+/// 数据目录：安装版放 %LOCALAPPDATA%\TranslatorBot，绿色版放 exe 同目录
+fn data_home() -> PathBuf {
+    if let Ok(local) = env::var("LOCALAPPDATA") {
+        PathBuf::from(local).join("TranslatorBot")
+    } else {
+        exe_dir()
+    }
+}
+
+fn log_line(home: &Path, msg: &str) {
     use std::io::Write;
-    let dir = root.join("logs");
+    let dir = home.join("logs");
     let _ = fs::create_dir_all(&dir);
     if let Ok(mut f) = fs::OpenOptions::new()
         .create(true)
@@ -43,21 +70,29 @@ fn log_line(root: &Path, msg: &str) {
     }
 }
 
-/// 安装版：程序在 %LOCALAPPDATA%\Programs\TranslatorBot，负载与数据在 %LOCALAPPDATA%\TranslatorBot
-/// 绿色版：exe 与 backend\ 同目录。返回 (数据根目录, 后端 exe)
-fn resolve_paths(exe_dir: &Path) -> (PathBuf, PathBuf) {
-    if let Ok(local) = env::var("LOCALAPPDATA") {
-        let base = PathBuf::from(local).join("TranslatorBot");
-        let backend = base
-            .join("app")
-            .join("backend")
-            .join("TranslatorBotBackend.exe");
-        if backend.exists() {
-            return (base, backend);
-        }
+/// 首次运行（或版本变化）时把内嵌后端解包到数据目录
+fn ensure_payload(home: &Path) -> Result<PathBuf, String> {
+    let app_dir = home.join("app");
+    let backend = app_dir.join("backend").join("TranslatorBotBackend.exe");
+    let marker = app_dir.join("version.txt");
+    let fresh = fs::read_to_string(&marker)
+        .map(|v| v.trim() == VERSION)
+        .unwrap_or(false)
+        && backend.exists();
+    if fresh {
+        return Ok(backend);
     }
-    let backend = exe_dir.join("backend").join("TranslatorBotBackend.exe");
-    (exe_dir.to_path_buf(), backend)
+
+    log_line(home, &format!("解包后端 {}", VERSION));
+    let _ = fs::remove_dir_all(app_dir.join("backend"));
+    fs::create_dir_all(&app_dir).map_err(|e| format!("创建目录失败：{e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(Cursor::new(BACKEND_ZIP)).map_err(|e| format!("后端包损坏：{e}"))?;
+    archive
+        .extract(&app_dir)
+        .map_err(|e| format!("解包失败：{e}"))?;
+    fs::write(&marker, VERSION).map_err(|e| format!("写入版本标记失败：{e}"))?;
+    Ok(backend)
 }
 
 fn start_backend(home: &Path, backend: &Path) -> Option<Child> {
@@ -69,10 +104,10 @@ fn start_backend(home: &Path, backend: &Path) -> Option<Child> {
         .ok()
 }
 
-fn wait_for_port(root: &Path, timeout: Duration) -> Option<String> {
-    let port_file = root.join("data").join("ui.port");
+fn wait_for_port(home: &Path, timeout: Duration) -> Option<String> {
+    let port_file = home.join("data").join("ui.port");
     let _ = fs::remove_file(&port_file);
-    let start = Instant::now();
+    let start = std::time::Instant::now();
     while start.elapsed() < timeout {
         if let Ok(text) = fs::read_to_string(&port_file) {
             let t = text.trim();
@@ -85,8 +120,138 @@ fn wait_for_port(root: &Path, timeout: Duration) -> Option<String> {
     None
 }
 
+/// 读取 config.yaml 的更新设置：mode = auto | direct | custom
+fn update_settings(home: &Path) -> (String, String) {
+    let path = home.join("config.yaml");
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return ("auto".into(), String::new()),
+    };
+    let value: serde_yaml::Value = match serde_yaml::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return ("auto".into(), String::new()),
+    };
+    let section = value.get("update");
+    let mode = section
+        .and_then(|u| u.get("mode"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("auto")
+        .to_string();
+    let proxy = section
+        .and_then(|u| u.get("custom_proxy"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    (mode, proxy)
+}
+
+async fn reachable(base: &str) -> bool {
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let url = format!("{}latest.json", base);
+    matches!(client.get(url).send().await, Ok(r) if r.status().is_success())
+}
+
+/// 按 自定义 → 官方直连 → 公共镜像 的顺序找一条能通的线路
+async fn resolve_base(home: &Path) -> Option<String> {
+    let (mode, proxy) = update_settings(home);
+    let mut candidates: Vec<String> = Vec::new();
+    if mode == "custom" && !proxy.is_empty() {
+        candidates.push(if proxy.ends_with('/') {
+            proxy.clone()
+        } else {
+            format!("{}/", proxy)
+        });
+    }
+    candidates.push(GH_BASE.to_string());
+    if mode != "direct" {
+        for m in MIRRORS {
+            candidates.push(m.to_string());
+        }
+    }
+    for base in candidates {
+        if reachable(&base).await {
+            return Some(base);
+        }
+    }
+    None
+}
+
+async fn updater_for(app: &AppHandle, base: &str) -> Result<tauri_plugin_updater::Updater, String> {
+    let url = format!("{}latest.json", base)
+        .parse()
+        .map_err(|_| "更新地址无效".to_string())?;
+    app.updater_builder()
+        .endpoints(vec![url])
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_check(app: AppHandle) -> Result<UpdateInfo, String> {
+    let home = data_home();
+    let base = match resolve_base(&home).await {
+        Some(b) => b,
+        None => {
+            return Ok(UpdateInfo {
+                available: false,
+                version: None,
+                notes: None,
+                error: Some("所有更新线路都连不上".into()),
+            })
+        }
+    };
+    let updater = updater_for(&app, &base).await?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateInfo {
+            available: true,
+            version: Some(update.version.clone()),
+            notes: update.body.clone(),
+            error: None,
+        }),
+        Ok(None) => Ok(UpdateInfo {
+            available: false,
+            version: None,
+            notes: None,
+            error: None,
+        }),
+        Err(e) => Ok(UpdateInfo {
+            available: false,
+            version: None,
+            notes: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+#[tauri::command]
+async fn update_install(app: AppHandle) -> Result<(), String> {
+    let home = data_home();
+    let base = resolve_base(&home).await.ok_or("连不上更新服务器")?;
+    let updater = updater_for(&app, &base).await?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("已经是最新版本")?;
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart()
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
@@ -94,14 +259,25 @@ fn main() {
                 let _ = w.set_focus();
             }
         }))
+        .invoke_handler(tauri::generate_handler![update_check, update_install])
         .setup(|app| {
-            let exe_dir = root_dir();
-            let (root, backend) = resolve_paths(&exe_dir);
-            log_line(&root, "Tauri 宿主启动");
+            let exe = exe_dir();
+            let home = if exe.join("backend").join("TranslatorBotBackend.exe").exists() {
+                exe.clone()
+            } else {
+                data_home()
+            };
+            log_line(&home, &format!("Tauri 宿主启动 v{}", VERSION));
 
-            let child = start_backend(&root, &backend).ok_or("后端启动失败")?;
-            let url = wait_for_port(&root, Duration::from_secs(30)).ok_or("后端未就绪")?;
-            log_line(&root, &format!("backend ready: {}", url));
+            let backend = if home == exe {
+                exe.join("backend").join("TranslatorBotBackend.exe")
+            } else {
+                ensure_payload(&home)?
+            };
+
+            let child = start_backend(&home, &backend).ok_or("后端启动失败")?;
+            let url = wait_for_port(&home, Duration::from_secs(60)).ok_or("后端未就绪")?;
+            log_line(&home, &format!("backend ready: {}", url));
             app.manage(Backend(Mutex::new(Some(child))));
 
             let icon = Image::from_bytes(ICON_PNG)?;
@@ -112,7 +288,7 @@ fn main() {
                 .inner_size(1240.0, 880.0)
                 .min_inner_size(1020.0, 680.0)
                 .background_color(tauri::window::Color(11, 15, 26, 255))
-                .data_directory(root.join("data").join("webview2"))
+                .data_directory(home.join("data").join("webview2"))
                 .icon(icon.clone())?
                 .build()?;
 
@@ -155,11 +331,9 @@ fn main() {
                 })
                 .build(app)?;
 
-            log_line(&root, "窗口与托盘就绪");
+            log_line(&home, "窗口与托盘就绪");
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("Tauri 运行失败");
 }
-
-

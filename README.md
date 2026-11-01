@@ -5,7 +5,7 @@
 
 ![界面截图](docs/screenshot.png)
 
-> 架构：Tauri 2（Rust）+ 系统 WebView2 + Python 后端。不打包浏览器内核，安装包 29 MB，装完占用约 45 MB，安装目录只有 2 个文件。
+> 架构：Tauri 2（Rust）+ 系统 WebView2 + Python 后端。不打包浏览器内核，安装包 19.5 MB，装完占用约 45 MB，安装目录只有程序和卸载器。
 
 ## 特性
 
@@ -22,17 +22,17 @@
 
 ### 方式一：安装包（推荐）
 
-1. 下载 `TranslatorBot-Setup-0.0.2.msi`
+1. 下载 `TranslatorBot-Setup-0.0.4.exe`
 2. 双击运行，**不需要管理员权限**，装到当前用户目录
-3. 装完后安装目录里只有 `TranslatorBot.exe` 和 `Uninstall TranslatorBot` 两个文件
-4. 开始菜单有快捷方式，程序和数据都在 `%LOCALAPPDATA%`
+3. 装完后安装目录里只有程序和卸载器两个文件
+4. 开始菜单有快捷方式；后端与数据在 `%LOCALAPPDATA%\TranslatorBot\`
 
-> 卸载：直接双击安装目录里的 `Uninstall TranslatorBot`，或在「设置 → 应用」里卸载。
+> 卸载：设置 → 应用 → 翻译机器人，或安装目录里的卸载程序。
 > 配置和日志在 `%LOCALAPPDATA%\TranslatorBot\`，卸载后保留，重装可继续用。
 
 ### 方式二：绿色版
 
-1. 下载 `TranslatorBot-v0.0.2-win64.zip`，解压到**英文路径**
+1. 下载 `TranslatorBot-v0.0.4-win64.zip`，解压到**英文路径**
 2. 双击 `TranslatorBot.exe`（**不要改文件名**，中文名会导致内核崩溃）
 
 ### 首次配置
@@ -92,23 +92,27 @@ features:
 
 ## 自动更新
 
-- 每次启动/手动点击时读取 GitHub Releases 最新版本
-- 下载 zip → 校验 `checksums.txt` 里的 SHA256 → 由 `updater.exe` 替换文件并重启
+- 程序启动和点「检查更新」时自动检查
+- 线路顺序：自定义节点 → 官方直连 → 公共镜像（单线路 5 秒超时自动换下一个）
+- 下载后先校验 minisign 签名，再静默安装并自动重启
+- 设置页「更新」区块可以选择线路或填自定义镜像
 - 不覆盖 `config.yaml`、`data/`、`logs/`
 
 发布新版本：
 
 ```bash
-git tag v0.0.2 && git push origin v0.0.2
+git tag v0.0.4 && git push origin v0.0.4
 ```
 
-GitHub Actions 会自动构建并上传 `TranslatorBot-v0.0.2-win64.zip`、`TranslatorBot-Setup-0.0.2.msi` 和 `checksums.txt`。
+GitHub Actions 会自动构建并上传 `TranslatorBot-Setup-0.0.4.exe`、`TranslatorBot-v0.0.4-win64.zip`、`latest.json` 和 `checksums.txt`。
+
+> 签名私钥配置在仓库 Settings → Secrets and variables → Actions：
+> `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 
 ## 开发
 
 ```
-host-tauri/     Rust 宿主（Tauri 2 + 系统 WebView2）：单开、托盘、拉起后端
-installer/      WiX 安装包定义（Product.wxs + 中文语言包）
+host-tauri/     Rust 宿主（Tauri 2 + 系统 WebView2）：单开、托盘、拉起后端、自动更新
 app/
 ├─ core/        语言识别、提示词、翻译编排
 ├─ providers/   OpenAI 兼容适配
@@ -121,7 +125,7 @@ app/
 运行机器人（无界面）：`python -m app.main`
 运行后端服务：`python -m app.console.serve`
 
-打包分三步：
+打包分两步：
 
 ```powershell
 # 1. 后端（PyInstaller，约 34 MB）
@@ -129,28 +133,25 @@ python -m PyInstaller --noconfirm --windowed --name TranslatorBotBackend ^
   --add-data "app\console\web;app\console\web" --add-data "assets;assets" ^
   --collect-all langdetect run.py
 
-# 2. 宿主（Tauri / Rust，约 3.5 MB）
+# 2. 宿主 + NSIS 安装包（Tauri CLI 会自动下载 NSIS）
 powershell -ExecutionPolicy Bypass -File .\build-host.ps1
-
-# 3. MSI 安装包（WiX 3.14，约 29 MB）
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Version 0.0.2
 ```
 
-宿主构建依赖：`rustup`（`stable-x86_64-pc-windows-gnu`）+ [w64devkit](https://github.com/skeeto/w64devkit) 解压到 `C:\Temp\w64devkit`，无需 Visual Studio；CI 上用 MSVC 工具链（`build-host.ps1 -Msvc`）。
+宿主构建依赖：`rustup`（本地用 `stable-x86_64-pc-windows-gnu` + [w64devkit](https://github.com/skeeto/w64devkit) 解压到 `C:\Temp\w64devkit`，无需 Visual Studio；CI 上用 MSVC：`build-host.ps1 -Msvc`）+ `cargo install tauri-cli`。
 `build-host.ps1` 会自动镜像到英文路径再编译（中文路径会让 `windres` 失败）。
 
-安装布局（装完后用户只看到前两项）：
+安装布局：
 
 ```
-%LOCALAPPDATA%\Programs\TranslatorBot\
-├─ TranslatorBot.exe          宿主
-└─ Uninstall TranslatorBot    卸载快捷方式（1 KB）
+%LOCALAPPDATA%\翻译机器人\
+├─ 翻译机器人.exe       宿主（后端已打包在 exe 内）
+└─ uninstall.exe        卸载器
 
 %LOCALAPPDATA%\TranslatorBot\
-├─ app\backend\               后端程序
-├─ data\                      数据库与缓存
-├─ logs\                      日志
-└─ config.yaml                配置
+├─ app\backend\         首次启动自动解包的后端
+├─ data\                数据库与缓存
+├─ logs\                日志
+└─ config.yaml          配置
 ```
 
 ## 常见问题
