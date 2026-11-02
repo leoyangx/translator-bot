@@ -1,6 +1,6 @@
 [package]
 name = "translatorbot-app"
-version = "0.0.9"
+version = "0.1.0-rc.1"
 edition = "2021"
 description = "Translation bot desktop shell"
 

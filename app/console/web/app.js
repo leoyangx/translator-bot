@@ -213,7 +213,6 @@ function renderFeatures() {
   const f = S.config.features || {};
   $("#f-bilingual").checked = !!f.bilingual;
   $("#f-copyblock").checked = f.copy_block !== false;
-  $("#f-keep-punct").checked = f.keep_punctuation !== false;
   $("#f-tone").checked = !!f.tone_buttons;
   $("#f-explain").checked = !!f.explain_button;
   $("#f-context").checked = !!f.context;
@@ -236,14 +235,72 @@ function renderPrompts() {
   $("#prompt-hint").textContent = p.translation ? "使用自定义提示词" : "使用内置默认提示词";
 }
 
+function closeModal() {
+  const root = $("#modal-root");
+  if (root) root.classList.remove("show");
+}
+
+function showModal(title, bodyHtml, actions) {
+  const root = $("#modal-root");
+  if (!root) return;
+  $("#modal-title").textContent = title;
+  $("#modal-body").innerHTML = bodyHtml || "";
+  const box = $("#modal-actions");
+  box.innerHTML = "";
+  (actions || []).forEach((action) => {
+    const btn = document.createElement("button");
+    btn.className = "btn" + (action.primary ? " primary" : "");
+    btn.textContent = action.label;
+    btn.addEventListener("click", () => {
+      if (action.onClick) action.onClick();
+    });
+    box.appendChild(btn);
+  });
+  root.classList.add("show");
+}
+
 function renderUpdate(info) {
-  const banner = $("#update-banner");
-  if (info && info.available) {
-    banner.classList.add("show");
-    $("#update-title").textContent = `发现新版本 v${info.version}`;
-    $("#update-notes").textContent = (info.notes || "").slice(0, 120);
-  } else {
-    banner.classList.remove("show");
+  if (!info || !info.available) return;
+  const notes = (info.notes || "包含若干体验改进与问题修复。").slice(0, 400);
+  showModal(
+    `发现新版本 v${info.version}`,
+    `<div class="modal-notes">${escapeAttr(notes)}</div>`,
+    [
+      { label: "暂不更新", onClick: closeModal },
+      { label: "下载并更新", primary: true, onClick: () => startInstall() },
+    ]
+  );
+}
+
+async function startInstall() {
+  showModal(
+    "正在下载更新",
+    '<div class="upd-bar"><i id="upd-bar-fill"></i></div><div class="hint" id="upd-text">准备中…</div><div class="hint" id="upd-err"></div>',
+    [{ label: "后台下载", onClick: closeModal }]
+  );
+  let nativeOk = false;
+  if (window.__TAURI__ && window.__TAURI__.core) {
+    try {
+      await window.__TAURI__.core.invoke("update_install");
+      nativeOk = true;
+    } catch (e) {
+      nativeOk = false;
+    }
+  }
+  if (nativeOk) {
+    showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
+    return;
+  }
+  try {
+    const res = await api().apply_update();
+    if (res && res.ok) {
+      showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
+    } else {
+      const msg = (res && res.message) || "内置更新失败";
+      $("#upd-err").textContent = zhError(msg);
+    }
+  } catch (e) {
+    $("#upd-err").textContent = zhError(e);
   }
 }
 
@@ -383,16 +440,23 @@ function bindStatic() {
   if (window.__TAURI__ && window.__TAURI__.event) {
     window.__TAURI__.event.listen("update-progress", (e) => {
       const d = (e && e.payload) || {};
-      const btn = $("#btn-do-update");
-      if (!btn) return;
+      const text = $("#upd-text");
+      const fill = $("#upd-bar-fill");
+      if (!text) return;
       if (d.total && d.total > 0) {
         const pct = Math.min(100, Math.round((d.chunk / d.total) * 100));
-        btn.textContent = `下载中 ${pct}%`;
+        text.textContent = `已下载 ${pct}%`;
+        if (fill) fill.style.width = pct + "%";
       } else {
-        btn.textContent = "下载中…";
+        text.textContent = "正在下载…";
       }
     });
   }
+
+  $("#modal-mask").addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
 
   $("#btn-check-update").addEventListener("click", async () => {
     const btn = $("#btn-check-update");
@@ -422,30 +486,7 @@ function bindStatic() {
     }
   });
 
-  $("#btn-do-update").addEventListener("click", async () => {
-    const btn = $("#btn-do-update");
-    btn.disabled = true;
-    btn.textContent = "下载中…";
-    let native_ok = false;
-    if (window.__TAURI__ && window.__TAURI__.core) {
-      try {
-        await window.__TAURI__.core.invoke("update_install");
-        native_ok = true;
-      } catch (e) {
-        native_ok = false;
-      }
-    }
-    if (native_ok) {
-      toast("正在安装更新，程序会自动重启…", "ok");
-      return;
-    }
-    const res = await api().apply_update();
-    if (!res.ok) {
-      btn.disabled = false;
-      btn.textContent = "下载并更新";
-      toast(res.message || "更新失败", "err");
-    }
-  });
+
 }
 
 async function exportDiag(hintSelector) {
@@ -508,7 +549,6 @@ function collect() {
     features: {
       bilingual: $("#f-bilingual").checked,
       copy_block: $("#f-copyblock").checked,
-      keep_punctuation: $("#f-keep-punct").checked,
       tone_buttons: $("#f-tone").checked,
       explain_button: $("#f-explain").checked,
       glossary: $("#f-glossary").checked,

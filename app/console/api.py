@@ -41,46 +41,68 @@ CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
 class BotProcess:
+    """机器人跑在后端进程内的线程里，任务管理器只显示两个进程。"""
+
     def __init__(self) -> None:
-        self.proc: subprocess.Popen | None = None
+        self.proc = None
         self.started_at: float = 0.0
+        self._thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._running = False
 
     def is_running(self) -> bool:
-        return self.proc is not None and self.proc.poll() is None
+        return bool(self._thread and self._thread.is_alive() and self._running)
 
-    def command(self) -> list[str]:
-        if getattr(sys, "frozen", False):
-            return [sys.executable, "--run-bot"]
-        return [sys.executable, "-m", "app.main"]
+    def _worker(self) -> None:
+        loop = asyncio.new_event_loop()
+        self._loop = loop
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._main())
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
+
+    async def _main(self) -> None:
+        from ..main import run as bot_run
+
+        self._running = True
+        try:
+            await bot_run(setup_logs=False)
+        except Exception:  # noqa: BLE001
+            log.exception("机器人异常退出")
+        finally:
+            self._running = False
 
     def start(self) -> tuple[bool, str]:
         if self.is_running():
             return True, "已经在运行"
-        self.proc = subprocess.Popen(
-            self.command(),
-            cwd=str(app_root()),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=CREATE_NO_WINDOW,
-        )
+        self._thread = threading.Thread(target=self._worker, name="bot-runner", daemon=True)
         self.started_at = time.time()
+        self._thread.start()
         time.sleep(1.2)
-        if self.proc.poll() is not None:
+        if not self._running and self._thread and not self._thread.is_alive():
             return False, "启动失败，请查看日志"
         return True, "已启动"
 
     def stop(self) -> tuple[bool, str]:
         if not self.is_running():
-            self.proc = None
+            self._thread = None
             return True, "本来就没在运行"
-        assert self.proc is not None
-        self.proc.terminate()
-        try:
-            self.proc.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait(timeout=5)
-        self.proc = None
+        loop = self._loop
+        if loop is not None:
+            try:
+                for task in asyncio.all_tasks(loop):
+                    loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:
+                pass
+        if self._thread is not None:
+            self._thread.join(timeout=10)
+        self._running = False
+        self._thread = None
+        self._loop = None
         return True, "已停止"
 
     def restart(self) -> tuple[bool, str]:
@@ -143,7 +165,7 @@ class ConsoleApi:
             uptime = f"{seconds // 60} 分 {seconds % 60} 秒"
         return {
             "running": running,
-            "pid": self.bot.proc.pid if running and self.bot.proc else None,
+            "pid": os.getpid() if running else None,
             "uptime": uptime,
             "started_at": self.bot.started_at if running else None,
         }
@@ -299,8 +321,7 @@ class ConsoleApi:
                     max_input_chars=cfg.features.max_input_chars,
                     prompt_template=cfg.prompts.translation,
                     explain_template=cfg.prompts.explain,
-                    keep_punctuation=cfg.features.keep_punctuation,
-                )
+                            )
                 started = time.perf_counter()
                 result = await translator.translate(
                     text, src=src, tgt=tgt, tone=tone, use_cache=False

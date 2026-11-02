@@ -35,7 +35,7 @@ COMMANDS = [
 ]
 
 
-async def run() -> None:
+async def run(setup_logs: bool = True) -> None:
     force_utf8_stdio()
 
     lock = SingleInstance()
@@ -45,7 +45,8 @@ async def run() -> None:
 
     root = app_root()
     cfg = load_config()
-    setup_logging(root / "logs")
+    if setup_logs:
+        setup_logging(root / "logs")
     log.info("启动 v%s：模型=%s 代理=%s", APP_VERSION, cfg.default_model.model if cfg.default_model else "无", cfg.proxy or "直连")
 
     model = cfg.default_model
@@ -77,7 +78,6 @@ async def run() -> None:
         max_input_chars=cfg.features.max_input_chars,
         prompt_template=cfg.prompts.translation,
         explain_template=cfg.prompts.explain,
-        keep_punctuation=cfg.features.keep_punctuation,
     )
 
     session = AiohttpSession(proxy=cfg.proxy or None)
