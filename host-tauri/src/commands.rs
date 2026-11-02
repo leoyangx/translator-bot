@@ -183,3 +183,15 @@ pub async fn backend_call(
     }
     resp.json().await.map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn front_log(state: State<'_, AppState>, message: String) {
+    let path = state.root.join("logs").join("host.log");
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(file, "[ui] {message}");
+    }
+}

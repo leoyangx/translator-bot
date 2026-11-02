@@ -1,8 +1,20 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+const DBG_VISIBLE = location.search.includes("debug");
+
 function dbg(msg) {
-  let el = document.getElementById("dbg");
+  let el = DBG_VISIBLE ? document.getElementById("dbg") : null;
+  if (!DBG_VISIBLE) {
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        window.__TAURI__.core.invoke("front_log", { message: msg });
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return;
+  }
   if (!el) {
     el = document.createElement("div");
     el.id = "dbg";
@@ -11,6 +23,13 @@ function dbg(msg) {
     document.body.appendChild(el);
   }
   el.textContent += msg + "\n";
+  try {
+    if (window.__TAURI__ && window.__TAURI__.core) {
+      window.__TAURI__.core.invoke("front_log", { message: msg });
+    }
+  } catch (e) {
+    /* ignore */
+  }
 }
 
 async function rpc(method, ...args) {
@@ -75,6 +94,39 @@ async function init() {
   loadLogs();
   const hash = location.hash.replace("#", "");
   if (hash) switchView(hash);
+}
+
+function formatDuration(totalSec) {
+  const sec = Math.max(0, Math.floor(totalSec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h} 小时 ${m} 分`;
+  if (m > 0) return `${m} 分 ${s} 秒`;
+  return `${s} 秒`;
+}
+
+function tickUptime() {
+  const el = $("#stat-uptime");
+  if (!el) return;
+  if (!S.startedAt) {
+    el.textContent = "点「启动」开始工作";
+    return;
+  }
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - S.startedAt));
+  el.textContent = `已运行 ${formatDuration(sec)}`;
+}
+
+async function refreshOverviewLog() {
+  const pre = $("#ov-log");
+  if (!pre) return;
+  try {
+    const lines = await api().read_logs(12);
+    const tail = (lines || []).slice(-12).join("\n");
+    pre.textContent = tail || "（暂无日志）";
+  } catch (e) {
+    pre.textContent = "读取日志失败：" + zhError(e);
+  }
 }
 
 /* ---------------- 渲染 ---------------- */

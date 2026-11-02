@@ -305,7 +305,8 @@ fn main() {
             commands::test_model,
             commands::test_translate,
             commands::backend_port,
-            commands::backend_call
+            commands::backend_call,
+            commands::front_log
         ])
         .setup(|app| {
             let exe = exe_dir();
