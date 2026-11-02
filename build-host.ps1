@@ -29,6 +29,8 @@ Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force "$work\host-tauri", "$work\dist" | Out-Null
 Copy-Item "$repo\host-tauri\*" "$work\host-tauri\" -Recurse -Force -Exclude "target", "gen"
 Copy-Item "$repo\assets" "$work\assets" -Recurse -Force
+New-Item -ItemType Directory -Force "$work\host-tauri\web" | Out-Null
+Copy-Item "$repo\app\console\web\*" "$work\host-tauri\web\" -Recurse -Force
 Copy-Item $backend "$work\dist\TranslatorBotBackend" -Recurse -Force
 
 $env:CARGO_TARGET_DIR = "C:\Temp\tauri-target"

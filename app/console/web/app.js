@@ -2,6 +2,9 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 async function rpc(method, ...args) {
+  if (window.__TAURI__ && window.__TAURI__.core) {
+    return await window.__TAURI__.core.invoke("backend_call", { method, args });
+  }
   const res = await fetch(`/api/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Console": "1" },

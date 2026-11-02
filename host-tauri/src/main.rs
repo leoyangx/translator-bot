@@ -303,7 +303,9 @@ fn main() {
             commands::validate_config,
             commands::list_models,
             commands::test_model,
-            commands::test_translate
+            commands::test_translate,
+            commands::backend_port,
+            commands::backend_call
         ])
         .setup(|app| {
             let exe = exe_dir();
@@ -322,16 +324,24 @@ fn main() {
 
             kill_stale_backend();
             let cfg = crate::config::load_config(&home).unwrap_or_default();
-            app.manage(commands::AppState { root: home.clone(), cfg: std::sync::Mutex::new(cfg) });
             let child = start_backend(&home, &backend).ok_or("后端启动失败")?;
             let url = wait_for_port(&home, Duration::from_secs(60)).ok_or("后端未就绪")?;
             log_line(&home, &format!("backend ready: {}", url));
+            let port: u16 = url
+                .trim_end_matches('/')
+                .rsplit(':')
+                .next()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(0);
+            app.manage(commands::AppState {
+                root: home.clone(),
+                cfg: std::sync::Mutex::new(cfg),
+                port: std::sync::Mutex::new(if port == 0 { None } else { Some(port) }),
+            });
             app.manage(Backend(Mutex::new(Some(child))));
 
             let icon = Image::from_bytes(ICON_PNG)?;
-            let parsed = url.parse().map_err(|e| format!("URL 无效: {}", e))?;
-
-            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(parsed))
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title(TITLE)
                 .inner_size(1240.0, 880.0)
                 .min_inner_size(1020.0, 680.0)

@@ -4,7 +4,7 @@
   "version": "0.1.0-rc.4",
   "identifier": "app.translatorbot.desktop",
   "build": {
-    "frontendDist": "./ui"
+    "frontendDist": "./web"
   },
   "app": {
     "withGlobalTauri": true,

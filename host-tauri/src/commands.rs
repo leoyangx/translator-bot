@@ -14,6 +14,7 @@ use crate::translator::Translator;
 pub struct AppState {
     pub root: std::path::PathBuf,
     pub cfg: Mutex<Config>,
+    pub port: Mutex<Option<u16>>,
 }
 
 fn err(message: impl Into<String>) -> Value {
@@ -146,4 +147,39 @@ pub async fn test_translate(
         })),
         Err(exc) => Err(exc.to_string()),
     }
+}
+
+#[tauri::command]
+pub fn backend_port(state: State<'_, AppState>) -> Option<u16> {
+    state.port.lock().ok().and_then(|p| *p)
+}
+
+#[tauri::command]
+pub async fn backend_call(
+    state: State<'_, AppState>,
+    method: String,
+    args: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let port = state
+        .port
+        .lock()
+        .ok()
+        .and_then(|p| *p)
+        .ok_or_else(|| "后端还没就绪".to_string())?;
+    let url = format!("http://127.0.0.1:{port}/api/{method}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .post(url)
+        .header("X-Console", "1")
+        .json(&args)
+        .send()
+        .await
+        .map_err(|e| format!("本地服务连接失败：{e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("本地服务返回 HTTP {}", resp.status()));
+    }
+    resp.json().await.map_err(|e| e.to_string())
 }
