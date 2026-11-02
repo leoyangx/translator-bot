@@ -2,6 +2,15 @@
 // 单实例 + 内嵌后端解包 + 系统 WebView2 窗口 + 托盘 + 自动更新（多线路）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
+mod config;
+mod db;
+mod languages;
+mod prompts;
+mod provider;
+mod translator;
+
+
 use std::{
     env, fs,
     io::Cursor,
@@ -286,7 +295,16 @@ fn main() {
                 let _ = w.set_focus();
             }
         }))
-        .invoke_handler(tauri::generate_handler![update_check, update_install])
+        .invoke_handler(tauri::generate_handler![
+            update_check,
+            update_install,
+            commands::get_state,
+            commands::save_config,
+            commands::validate_config,
+            commands::list_models,
+            commands::test_model,
+            commands::test_translate
+        ])
         .setup(|app| {
             let exe = exe_dir();
             let home = if exe.join("backend").join("TranslatorBotBackend.exe").exists() {
@@ -303,6 +321,8 @@ fn main() {
             };
 
             kill_stale_backend();
+            let cfg = crate::config::load_config(&home).unwrap_or_default();
+            app.manage(commands::AppState { root: home.clone(), cfg: std::sync::Mutex::new(cfg) });
             let child = start_backend(&home, &backend).ok_or("后端启动失败")?;
             let url = wait_for_port(&home, Duration::from_secs(60)).ok_or("后端未就绪")?;
             log_line(&home, &format!("backend ready: {}", url));
