@@ -453,3 +453,28 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   background: linear-gradient(90deg, #6d4dff, #22d3ee);
   transition: width 0.2s ease;
 }
+
+/* ---------- 模型卡片头部 ---------- */
+.model-title {
+  font-size: 14px;
+  font-weight: 620;
+  color: var(--text);
+  margin-right: auto;
+}
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+.icon-btn:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.08);
+}

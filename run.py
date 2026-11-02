@@ -27,12 +27,6 @@ def _log_crash(exc: BaseException) -> None:
 def main() -> None:
     argv = sys.argv[1:]
 
-    if "--run-bot" in argv:
-        from app.main import main as bot_main
-
-        bot_main()
-        return
-
     if "--serve" in argv:
         from app.console.serve import run as serve
 

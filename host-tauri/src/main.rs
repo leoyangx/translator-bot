@@ -95,6 +95,17 @@ fn ensure_payload(home: &Path) -> Result<PathBuf, String> {
     Ok(backend)
 }
 
+fn kill_stale_backend() {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("taskkill")
+            .args(["/F", "/IM", "TranslatorBotBackend.exe"])
+            .creation_flags(0x08000000)
+            .output();
+    }
+}
+
 fn start_backend(home: &Path, backend: &Path) -> Option<Child> {
     log_line(home, &format!("backend: {}", backend.display()));
     Command::new(backend)
@@ -291,6 +302,7 @@ fn main() {
                 ensure_payload(&home)?
             };
 
+            kill_stale_backend();
             let child = start_backend(&home, &backend).ok_or("后端启动失败")?;
             let url = wait_for_port(&home, Duration::from_secs(60)).ok_or("后端未就绪")?;
             log_line(&home, &format!("backend ready: {}", url));

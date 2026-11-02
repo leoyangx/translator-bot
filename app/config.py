@@ -10,8 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.1.0-rc.3"
-DEFAULT_UPDATE_REPO = "leoyangx/translator-bot"
+APP_VERSION = "0.1.0-rc.4"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
 
@@ -65,8 +64,6 @@ class PromptsConfig:
 
 @dataclass(slots=True)
 class UpdateConfig:
-    enabled: bool = True
-    repo: str = DEFAULT_UPDATE_REPO
     mode: str = "auto"        # auto | direct | custom
     custom_proxy: str = ""
 
@@ -191,8 +188,6 @@ def config_from_dict(raw: dict[str, Any]) -> Config:
             explain=str(prompt_raw.get("explain") or ""),
         ),
         update=UpdateConfig(
-            enabled=bool(update_raw.get("enabled", True)),
-            repo=str(update_raw.get("repo") or DEFAULT_UPDATE_REPO),
             mode=str(update_raw.get("mode") or "auto"),
             custom_proxy=str(update_raw.get("custom_proxy") or ""),
         ),

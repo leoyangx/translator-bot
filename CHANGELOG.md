@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.1.0-rc.4
+
+### 变更
+
+- 模型卡片去掉重复的「显示名称」输入框，服务商下拉扩充到 15 个：新增 Google Gemini、xAI Grok、Anthropic Claude（需中转）、Mistral、Groq、Together AI
+- 删除按钮改为卡片右上角的图标按钮
+- 启动前自动结束残留的 `TranslatorBotBackend.exe`，避免"装了新版点启动没反应"
+- NSIS 安装前自动结束旧进程（`taskkill`），覆盖安装不再因文件被占用而失败
+
+### 清理
+
+- 删除 `run.py --run-bot` 旧入口
+- 删除配置里已废弃的 `update.repo`、`update.enabled`
+
 ## 0.1.0-rc.3
 
 ### 变更

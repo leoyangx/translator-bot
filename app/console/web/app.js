@@ -91,11 +91,17 @@ function renderLanguages() {
 
 const PROVIDERS = [
   { label: "DeepSeek 官方", name: "DeepSeek", base: "https://api.deepseek.com/v1" },
+  { label: "OpenAI", name: "OpenAI", base: "https://api.openai.com/v1" },
+  { label: "Google Gemini", name: "Gemini", base: "https://generativelanguage.googleapis.com/v1beta/openai/" },
+  { label: "xAI Grok", name: "Grok", base: "https://api.x.ai/v1" },
+  { label: "Anthropic Claude（需中转）", name: "Claude", base: "" },
+  { label: "Mistral", name: "Mistral", base: "https://api.mistral.ai/v1" },
+  { label: "Groq", name: "Groq", base: "https://api.groq.com/openai/v1" },
+  { label: "Together AI", name: "Together", base: "https://api.together.xyz/v1" },
+  { label: "OpenRouter 中转", name: "OpenRouter", base: "https://openrouter.ai/api/v1" },
   { label: "通义千问（阿里云）", name: "通义千问", base: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
   { label: "智谱 GLM", name: "智谱", base: "https://open.bigmodel.cn/api/paas/v4" },
   { label: "月之暗面 Kimi", name: "Kimi", base: "https://api.moonshot.cn/v1" },
-  { label: "OpenAI", name: "OpenAI", base: "https://api.openai.com/v1" },
-  { label: "OpenRouter 中转", name: "OpenRouter", base: "https://openrouter.ai/api/v1" },
   { label: "硅基流动 中转", name: "硅基流动", base: "https://api.siliconflow.cn/v1" },
   { label: "本地 Ollama", name: "Ollama", base: "http://127.0.0.1:11434/v1" },
   { label: "自定义 / 中转站", name: "", base: "" },
@@ -135,19 +141,20 @@ function modelCard(m, index) {
   const id = m.id || `model-${Date.now()}-${index}`;
   const preset = providerFor(m.base_url);
   const hasModels = (modelCache[id] || []).length > 0;
+  const title = preset ? preset.label : m.name || "自定义服务商";
   return `
-    <div class="model-card" data-id="${id}">
+    <div class="model-card" data-id="${id}" data-name="${escapeAttr(preset ? preset.name : m.name || "")}">
       <div class="model-head">
-        <input class="m-name" value="${escapeAttr(m.name || (preset ? preset.name : ""))}" placeholder="显示名称，例如 DeepSeek">
+        <div class="model-title">${escapeAttr(title)}</div>
         <label class="mini-radio"><input type="radio" name="default-model" ${m.default ? "checked" : ""}> 默认</label>
-        <button class="btn danger" data-act="delete">删除</button>
+        <button class="icon-btn" data-act="delete" title="删除这个模型">✕</button>
       </div>
       <div class="model-grid">
         <label class="field">服务商
           <select class="m-preset">${presetOptions(m)}</select>
         </label>
         <label class="field">接口地址
-          <input class="m-base" value="${escapeAttr(m.base_url || "")}" placeholder="https://api.deepseek.com/v1">
+          <input class="m-base" value="${escapeAttr(m.base_url || "")}" placeholder="https://api.openai.com/v1">
         </label>
         <label class="field">API Key
           <input class="m-key" type="password" value="${escapeAttr(m.api_key || "")}" placeholder="sk-...">
@@ -396,8 +403,10 @@ function bindStatic() {
     if (!select) return;
     const preset = PROVIDERS.find((p) => p.label === select.value);
     if (!preset) return;
+    card.dataset.name = preset.name;
+    const titleEl = card.querySelector(".model-title");
+    if (titleEl) titleEl.textContent = preset.label;
     card.querySelector(".m-base").value = preset.base;
-    if (preset.name) card.querySelector(".m-name").value = preset.name;
     delete modelCache[card.dataset.id];
     const modelSel = card.querySelector(".m-model");
     if (modelSel) {
@@ -560,7 +569,7 @@ function switchView(name) {
 function readModel(card) {
   return {
     id: card.dataset.id,
-    name: card.querySelector(".m-name").value.trim(),
+    name: card.dataset.name || card.querySelector(".model-title").textContent.trim(),
     base_url: card.querySelector(".m-base").value.trim(),
     model: card.querySelector(".m-model").value.trim(),
     api_key: card.querySelector(".m-key").value.trim(),
@@ -605,10 +614,10 @@ function collect() {
       translation: tPrompt === (defaults.translation_prompt || "").trim() ? "" : tPrompt,
       explain: ePrompt === (defaults.explain_prompt || "").trim() ? "" : ePrompt,
     },
-    update: Object.assign({}, S.config.update || { enabled: true, repo: "" }, {
+    update: {
       mode: $("#f-update-mode").value,
       custom_proxy: $("#f-update-proxy").value.trim(),
-    }),
+    },
     app: {
       close_to_tray: $("#f-close-tray").checked,
       autostart_bot: $("#f-autostart-bot").checked,
