@@ -160,6 +160,23 @@
       <!-- 模型 -->
       <section class="view" id="view-models">
         <div class="card">
+          <h2>Telegram 机器人</h2>
+          <p class="hint">Bot Token 从 @BotFather 获取。保存后重启生效。</p>
+          <div class="grid-2">
+            <label class="field">Bot Token
+              <input type="text" id="f-token" placeholder="123456:AA...">
+            </label>
+            <label class="field">允许使用的用户 ID（逗号分隔，可留空）
+              <input type="text" id="f-admin-ids" placeholder="留空 = 第一个使用者自动成为主人">
+            </label>
+          </div>
+          <div class="toolbar" style="margin-top:12px">
+            <button class="btn" id="btn-test-token">测试 Token</button>
+            <span class="test-result" id="token-result"></span>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>模型列表</h2>
           <p class="hint">任何 OpenAI 兼容接口都能接：DeepSeek、通义、智谱、OpenRouter、本地 Ollama。选一个作为默认。</p>
           <div id="model-list"></div>
@@ -284,19 +301,6 @@
 
       <!-- 设置 -->
       <section class="view" id="view-settings">
-        <div class="card">
-          <h2>连接</h2>
-          <p class="hint">Bot Token 从 @BotFather 获取。填完保存并重启即可生效。</p>
-          <div class="grid-2">
-            <label class="field">Telegram Bot Token
-              <input type="text" id="f-token" placeholder="123456:AA...">
-            </label>
-            <label class="field">允许使用的用户 ID（逗号分隔，可留空）
-              <input type="text" id="f-admin-ids" placeholder="留空 = 第一个使用者自动成为主人">
-            </label>
-          </div>
-        </div>
-
         <div class="card">
           <h2>启动与行为</h2>
           <div class="switch-row">

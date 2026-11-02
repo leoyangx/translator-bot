@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.0.5"
+APP_VERSION = "0.0.6"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
 
@@ -65,7 +65,7 @@ class PromptsConfig:
 @dataclass(slots=True)
 class UpdateConfig:
     enabled: bool = True
-    repo: str = ""
+    repo: str = "leoyangx/translator-bot"
     mode: str = "auto"        # auto | direct | custom
     custom_proxy: str = ""
 

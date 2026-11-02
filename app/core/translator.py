@@ -1,8 +1,10 @@
 """翻译编排：查缓存、拼提示词、调模型、清洗输出。"""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
+import os
 import re
 
 from ..providers.base import ChatProvider
@@ -14,6 +16,10 @@ from .prompts import build_explain_messages, build_messages
 log = logging.getLogger(__name__)
 
 _MAX_GLOSSARY_ENTRIES = 80
+
+# 多人同时翻译时的并发上限，避免把上游 API 打爆
+_CONCURRENCY = max(1, int(os.getenv("TRANSLATORBOT_CONCURRENCY", "8") or 8))
+_SEMAPHORE = asyncio.Semaphore(_CONCURRENCY)
 
 
 class InputTooLong(ValueError):
@@ -126,9 +132,10 @@ class Translator:
         messages = build_messages(
             text, src, tgt, tone, glossary, context, self._prompt_template
         )
-        result = await self._provider.chat(
-            messages, model=self._model, temperature=self._temperature
-        )
+        async with _SEMAPHORE:
+            result = await self._provider.chat(
+                messages, model=self._model, temperature=self._temperature
+            )
         output = clean_output(result.text)
         if not output:
             raise ProviderError("模型返回了空译文，请重试")
@@ -147,9 +154,10 @@ class Translator:
         )
 
     async def explain(self, text: str) -> str:
-        result = await self._provider.chat(
-            build_explain_messages(normalize(text), self._explain_template),
-            model=self._model,
-            temperature=0.4,
-        )
+        async with _SEMAPHORE:
+            result = await self._provider.chat(
+                build_explain_messages(normalize(text), self._explain_template),
+                model=self._model,
+                temperature=0.4,
+            )
         return clean_output(result.text)

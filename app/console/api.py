@@ -13,6 +13,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+import aiohttp
+
 from ..config import (
     APP_VERSION,
     Config,
@@ -189,6 +191,38 @@ class ConsoleApi:
         return {"ok": ok, "message": msg, "status": self._status()}
 
     # ---------- 模型 ----------
+    def test_token(self, token: str = "") -> dict[str, Any]:
+        token = (token or "").strip()
+        if not token:
+            return {"ok": False, "message": "先填 Bot Token"}
+
+        async def run() -> dict[str, Any]:
+            cfg = self._load()
+            proxy = cfg.proxy or None
+            timeout = aiohttp.ClientTimeout(total=15)
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(
+                        f"https://api.telegram.org/bot{token}/getMe", proxy=proxy
+                    ) as resp:
+                        data = await resp.json(content_type=None)
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": False, "message": f"连不上 Telegram：{exc}"}
+            if not data.get("ok"):
+                return {
+                    "ok": False,
+                    "message": data.get("description") or "Token 无效",
+                }
+            user = data.get("result") or {}
+            name = user.get("username") or user.get("first_name") or ""
+            return {
+                "ok": True,
+                "message": f"已连接 @{name}",
+                "username": user.get("username"),
+            }
+
+        return self._run_async(run())
+
     def test_model(self, model: dict[str, Any]) -> dict[str, Any]:
         base_url = str(model.get("base_url") or "").strip()
         api_key = str(model.get("api_key") or "").strip()

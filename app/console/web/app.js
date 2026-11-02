@@ -144,6 +144,15 @@ async function refreshOverviewLog() {
   }
 }
 
+function zhError(err) {
+  const raw = String(err || "");
+  if (/not allowed by ACL/i.test(raw)) return "更新命令被系统权限拦截，请升级到最新版本";
+  if (/signature|verification/i.test(raw)) return "更新包签名校验失败，已终止更新";
+  if (/timed? ?out|connect|dns|network|error sending request/i.test(raw))
+    return "连不上更新服务器，可在「设置 → 更新」换线路或填镜像";
+  return raw || "未知错误";
+}
+
 function formatDuration(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -304,6 +313,23 @@ function bindStatic() {
     }
   });
 
+  $("#btn-test-token").addEventListener("click", async () => {
+    const btn = $("#btn-test-token");
+    const out = $("#token-result");
+    btn.disabled = true;
+    out.className = "test-result";
+    out.textContent = "检测中…";
+    try {
+      const res = await api().test_token($("#f-token").value.trim());
+      out.className = "test-result " + (res.ok ? "ok" : "err");
+      out.textContent = res.message || (res.ok ? "已连接" : "连接失败");
+    } catch (e) {
+      out.className = "test-result err";
+      out.textContent = "检测失败：" + zhError(e);
+    }
+    btn.disabled = false;
+  });
+
   $("#btn-test").addEventListener("click", async () => {
     const text = $("#test-input").value.trim();
     if (!text) return toast("先输入要翻译的内容", "err");
@@ -356,22 +382,28 @@ function bindStatic() {
   $("#btn-check-update").addEventListener("click", async () => {
     const btn = $("#btn-check-update");
     btn.disabled = true;
-    let info;
+    let info = null;
     if (window.__TAURI__ && window.__TAURI__.core) {
       try {
         info = await window.__TAURI__.core.invoke("update_check");
       } catch (e) {
-        info = { available: false, error: String(e) };
+        // 原生更新不可用时回退到内置更新接口，避免把 ACL 报错暴露给用户
+        info = null;
       }
-    } else {
-      info = await api().check_update();
+    }
+    if (!info) {
+      try {
+        info = await api().check_update();
+      } catch (e) {
+        info = { available: false, error: zhError(e) };
+      }
     }
     btn.disabled = false;
     if (info.available) {
       renderUpdate(info);
       toast(`发现新版本 v${info.version}`, "ok");
     } else {
-      toast(info.error || info.reason || "已经是最新版本", info.error ? "err" : "ok");
+      toast(info.error ? zhError(info.error) : info.reason || "已经是最新版本", info.error ? "err" : "ok");
     }
   });
 
@@ -379,17 +411,18 @@ function bindStatic() {
     const btn = $("#btn-do-update");
     btn.disabled = true;
     btn.textContent = "下载中…";
+    let native_ok = false;
     if (window.__TAURI__ && window.__TAURI__.core) {
       try {
         await window.__TAURI__.core.invoke("update_install");
-        toast("正在安装更新，程序会自动重启…", "ok");
-        return;
+        native_ok = true;
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = "下载并更新";
-        toast(`更新失败：${e}`, "err");
-        return;
+        native_ok = false;
       }
+    }
+    if (native_ok) {
+      toast("正在安装更新，程序会自动重启…", "ok");
+      return;
     }
     const res = await api().apply_update();
     if (!res.ok) {
