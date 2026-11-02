@@ -380,6 +380,20 @@ function bindStatic() {
     }
   });
 
+  if (window.__TAURI__ && window.__TAURI__.event) {
+    window.__TAURI__.event.listen("update-progress", (e) => {
+      const d = (e && e.payload) || {};
+      const btn = $("#btn-do-update");
+      if (!btn) return;
+      if (d.total && d.total > 0) {
+        const pct = Math.min(100, Math.round((d.chunk / d.total) * 100));
+        btn.textContent = `下载中 ${pct}%`;
+      } else {
+        btn.textContent = "下载中…";
+      }
+    });
+  }
+
   $("#btn-check-update").addEventListener("click", async () => {
     const btn = $("#btn-check-update");
     btn.disabled = true;

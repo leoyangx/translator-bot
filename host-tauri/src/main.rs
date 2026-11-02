@@ -17,7 +17,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_updater::UpdaterExt;
 
@@ -241,8 +241,17 @@ async fn update_install(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .ok_or("已经是最新版本")?;
+    let handle = app.clone();
     update
-        .download_and_install(|_chunk, _total| {}, || {})
+        .download_and_install(
+            move |chunk, total| {
+                let _ = handle.emit(
+                    "update-progress",
+                    serde_json::json!({ "chunk": chunk, "total": total }),
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|e| e.to_string())?;
     app.restart()

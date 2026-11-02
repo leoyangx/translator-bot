@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.0.8"
+APP_VERSION = "0.0.9"
 DEFAULT_UPDATE_REPO = "leoyangx/translator-bot"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
