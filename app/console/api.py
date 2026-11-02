@@ -35,7 +35,6 @@ from ..paths import app_root
 from ..providers.openai_compat import OpenAICompatProvider
 from ..storage.db import Database
 from ..storage.repositories import Repo
-from . import updater
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -460,47 +459,6 @@ class ConsoleApi:
             check=True,
             creationflags=CREATE_NO_WINDOW,
         )
-
-    # ---------- 更新 ----------
-    def check_update(self) -> dict[str, Any]:
-        cfg = self._load()
-        info = updater.check(cfg.update.repo, APP_VERSION, cfg.update.enabled)
-        self._update_info = info
-        return info
-
-    def apply_update(self) -> dict[str, Any]:
-        cfg = self._load()
-        if not self._update_info.get("available"):
-            return {"ok": False, "message": "没有可用更新"}
-        try:
-            package = updater.download(self._update_info, self.root)
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "message": f"下载失败：{exc}"}
-
-        try:
-            if getattr(sys, "frozen", False):
-                exe = Path(sys.executable)
-                command = [
-                    str(exe.parent / "updater.exe"),
-                    "--pid", str(os.getpid()),
-                    "--source", str(package),
-                    "--target", str(self.root),
-                    "--exe", str(exe),
-                ]
-            else:
-                command = [
-                    sys.executable, "-m", "app.console.updater_main",
-                    "--pid", str(os.getpid()),
-                    "--source", str(package),
-                    "--target", str(self.root),
-                    "--exe", str(self.root / "启动.bat"),
-                ]
-            subprocess.Popen(command, cwd=str(self.root), creationflags=CREATE_NO_WINDOW)
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "message": f"启动更新程序失败：{exc}"}
-
-        threading.Timer(1.5, self.quit_app).start()
-        return {"ok": True, "message": "正在重启并应用更新…"}
 
     # ---------- 窗口 ----------
     def quit_app(self) -> dict[str, Any]:

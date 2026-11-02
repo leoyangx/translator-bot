@@ -90,16 +90,18 @@ function renderLanguages() {
 }
 
 const PROVIDERS = [
-  { label: "DeepSeek 官方", name: "DeepSeek", base: "https://api.deepseek.com/v1", models: ["deepseek-chat", "deepseek-reasoner"] },
-  { label: "通义千问（阿里云）", name: "通义千问", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", models: ["qwen-plus", "qwen-max", "qwen-turbo"] },
-  { label: "智谱 GLM", name: "智谱", base: "https://open.bigmodel.cn/api/paas/v4", models: ["glm-4-plus", "glm-4-air", "glm-4-flash"] },
-  { label: "月之暗面 Kimi", name: "Kimi", base: "https://api.moonshot.cn/v1", models: ["moonshot-v1-8k", "moonshot-v1-32k"] },
-  { label: "OpenAI", name: "OpenAI", base: "https://api.openai.com/v1", models: ["gpt-4o-mini", "gpt-4o"] },
-  { label: "OpenRouter 中转", name: "OpenRouter", base: "https://openrouter.ai/api/v1", models: ["openai/gpt-4o-mini", "deepseek/deepseek-chat"] },
-  { label: "硅基流动 中转", name: "硅基流动", base: "https://api.siliconflow.cn/v1", models: ["deepseek-ai/DeepSeek-V3"] },
-  { label: "本地 Ollama", name: "Ollama", base: "http://127.0.0.1:11434/v1", models: ["qwen2.5:7b", "llama3.1:8b"] },
-  { label: "自定义 / 中转站", name: "", base: "", models: [] },
+  { label: "DeepSeek 官方", name: "DeepSeek", base: "https://api.deepseek.com/v1" },
+  { label: "通义千问（阿里云）", name: "通义千问", base: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+  { label: "智谱 GLM", name: "智谱", base: "https://open.bigmodel.cn/api/paas/v4" },
+  { label: "月之暗面 Kimi", name: "Kimi", base: "https://api.moonshot.cn/v1" },
+  { label: "OpenAI", name: "OpenAI", base: "https://api.openai.com/v1" },
+  { label: "OpenRouter 中转", name: "OpenRouter", base: "https://openrouter.ai/api/v1" },
+  { label: "硅基流动 中转", name: "硅基流动", base: "https://api.siliconflow.cn/v1" },
+  { label: "本地 Ollama", name: "Ollama", base: "http://127.0.0.1:11434/v1" },
+  { label: "自定义 / 中转站", name: "", base: "" },
 ];
+
+const modelCache = {};
 
 function providerFor(base) {
   const value = (base || "").trim().replace(/\/$/, "");
@@ -115,119 +117,47 @@ function presetOptions(m) {
   ).join("");
 }
 
-const modelCache = {};
-
-function modelOptions(m) {
-  const id = m.id || "";
-  const preset = providerFor(m.base_url);
-  const presetModels = preset ? preset.models : [];
-  const cached = modelCache[id] || [];
+function modelSelectHtml(m, disabled) {
+  const cached = modelCache[m.id || ""] || [];
+  if (!cached.length) {
+    return `<option value="">${disabled ? "填写 API Key 后自动拉取" : "点「拉取模型」获取"}</option>`;
+  }
   const current = m.model || "";
-  const merged = Array.from(new Set([...cached, ...presetModels]));
-  const names = merged.length ? merged : current ? [current] : [];
-  if (!names.length) return `<option value="">加载模型列表中…</option>`;
-  return names
+  return cached
     .map(
       (v) =>
         `<option value="${escapeAttr(v)}" ${v === current ? "selected" : ""}>${escapeAttr(v)}</option>`
     )
     .join("");
-}
-
-function fillModelSelect(card, names) {
-  const sel = card.querySelector(".m-model");
-  if (!sel || !names || !names.length) return;
-  const current = sel.value || "";
-  sel.innerHTML = names
-    .map(
-      (v) =>
-        `<option value="${escapeAttr(v)}" ${v === current ? "selected" : ""}>${escapeAttr(v)}</option>`
-    )
-    .join("");
-  if (!sel.value) sel.value = names[0];
-}
-
-async function autoLoadModels() {
-  const cards = Array.from(document.querySelectorAll(".model-card"));
-  for (const card of cards) {
-    if (modelCache[card.dataset.id]) continue;
-    const payload = readModel(card);
-    if (!payload.base_url || !payload.api_key) continue;
-    const res = await api().list_models(payload);
-    if (res && res.ok && (res.models || []).length) {
-      modelCache[card.dataset.id] = res.models;
-      fillModelSelect(card, res.models);
-    }
-  }
-}
-
-async function refreshOverviewLog() {
-  const el = $("#ov-log");
-  if (!el) return;
-  try {
-    const lines = await api().read_logs(12);
-    el.textContent = (lines || []).join("\n") || "暂无日志";
-    el.scrollTop = el.scrollHeight;
-  } catch (e) {
-    el.textContent = "日志读取失败";
-  }
-}
-
-function zhError(err) {
-  const raw = String(err || "");
-  if (/not allowed by ACL/i.test(raw)) return "更新命令被系统权限拦截，请升级到最新版本";
-  if (/signature|verification/i.test(raw)) return "更新包签名校验失败，已终止更新";
-  if (/timed? ?out|connect|dns|network|error sending request/i.test(raw))
-    return "连不上更新服务器，可在「设置 → 更新」换线路或填镜像";
-  return raw || "未知错误";
-}
-
-function formatDuration(sec) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  if (h > 0) return `${h} 小时 ${m} 分 ${s} 秒`;
-  return `${m} 分 ${s} 秒`;
-}
-
-function tickUptime() {
-  const el = $("#stat-uptime");
-  if (!el) return;
-  if (!S.startedAt) {
-    el.textContent = "点「启动」开始工作";
-    return;
-  }
-  const sec = Math.max(0, Math.floor(Date.now() / 1000 - S.startedAt));
-  el.textContent = `已运行 ${formatDuration(sec)}`;
 }
 
 function modelCard(m, index) {
   const id = m.id || `model-${Date.now()}-${index}`;
+  const preset = providerFor(m.base_url);
+  const hasModels = (modelCache[id] || []).length > 0;
   return `
     <div class="model-card" data-id="${id}">
       <div class="model-head">
-        <input class="m-name" value="${escapeAttr(m.name || "")}" placeholder="显示名称，例如 DeepSeek">
+        <input class="m-name" value="${escapeAttr(m.name || (preset ? preset.name : ""))}" placeholder="显示名称，例如 DeepSeek">
         <label class="mini-radio"><input type="radio" name="default-model" ${m.default ? "checked" : ""}> 默认</label>
         <button class="btn danger" data-act="delete">删除</button>
       </div>
-      <label class="field" style="margin-bottom:10px">服务商预设
-        <select class="m-preset">${presetOptions(m)}</select>
-      </label>
       <div class="model-grid">
-        <label class="field">接口地址<input class="m-base" value="${escapeAttr(m.base_url || "")}" placeholder="https://api.deepseek.com/v1"></label>
-        <label class="field">模型名
-          <select class="m-model">${modelOptions(m)}</select>
+        <label class="field">服务商
+          <select class="m-preset">${presetOptions(m)}</select>
         </label>
-        <label class="field">API Key<input class="m-key" type="password" value="${escapeAttr(m.api_key || "")}" placeholder="sk-..."></label>
-        <label class="field">用途
-          <select class="m-kind">
-            <option value="text" ${m.kind !== "vision" ? "selected" : ""}>文本翻译</option>
-            <option value="vision" ${m.kind === "vision" ? "selected" : ""}>看图翻译</option>
-          </select>
+        <label class="field">接口地址
+          <input class="m-base" value="${escapeAttr(m.base_url || "")}" placeholder="https://api.deepseek.com/v1">
+        </label>
+        <label class="field">API Key
+          <input class="m-key" type="password" value="${escapeAttr(m.api_key || "")}" placeholder="sk-...">
+        </label>
+        <label class="field">模型
+          <select class="m-model" ${hasModels ? "" : "disabled"}>${modelSelectHtml(m, !hasModels)}</select>
         </label>
       </div>
       <div class="model-foot">
-        <button class="btn" data-act="test">测试连接</button>
+        <button class="btn" data-act="test">拉取模型并测试</button>
         <span class="test-result"></span>
       </div>
     </div>`;
@@ -238,7 +168,47 @@ function renderModels() {
   $("#model-list").innerHTML = list.length
     ? list.map((m, i) => modelCard(m, i)).join("")
     : `<div class="empty">还没有模型，点下面「添加模型」开始</div>`;
-  autoLoadModels();
+}
+
+function fillModelSelect(card, names) {
+  const sel = card.querySelector(".m-model");
+  if (!sel) return;
+  sel.disabled = false;
+  const current = sel.value || "";
+  sel.innerHTML = names
+    .map(
+      (v) =>
+        `<option value="${escapeAttr(v)}" ${v === current ? "selected" : ""}>${escapeAttr(v)}</option>`
+    )
+    .join("");
+  if (!sel.value) sel.value = names[0];
+}
+
+async function fetchModels(card, quiet) {
+  const payload = readModel(card);
+  if (!payload.base_url || !payload.api_key) return false;
+  if (!quiet) {
+    const out = card.querySelector(".test-result");
+    out.className = "test-result";
+    out.textContent = "拉取模型列表中…";
+  }
+  const res = await api().list_models(payload);
+  if (res && res.ok && (res.models || []).length) {
+    modelCache[card.dataset.id] = res.models;
+    fillModelSelect(card, res.models);
+    if (!quiet) {
+      const out = card.querySelector(".test-result");
+      out.className = "test-result ok";
+      out.textContent = `已加载 ${res.models.length} 个模型`;
+    }
+    return true;
+  }
+  if (!quiet) {
+    const out = card.querySelector(".test-result");
+    out.className = "test-result err";
+    out.textContent = (res && res.message) || "拉取失败，检查接口地址和 Key";
+  }
+  return false;
 }
 
 function renderFeatures() {
@@ -307,31 +277,26 @@ function renderUpdate(info) {
 async function startInstall() {
   showModal(
     "正在下载更新",
-    '<div class="upd-bar"><i id="upd-bar-fill"></i></div><div class="hint" id="upd-text">准备中…</div><div class="hint" id="upd-err"></div>',
+    '<div class="upd-bar"><i id="upd-bar-fill"></i></div><div class="hint" id="upd-text">准备中…</div>',
     [{ label: "后台下载", onClick: closeModal }]
   );
-  if (window.__TAURI__ && window.__TAURI__.core) {
-    try {
-      await window.__TAURI__.core.invoke("update_install");
-      showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
-    } catch (e) {
-      showModal(
-        "更新失败",
-        `<div class="modal-notes">${escapeAttr(zhError(e))}</div>`,
-        [{ label: "知道了", primary: true, onClick: closeModal }]
-      );
-    }
+  if (!(window.__TAURI__ && window.__TAURI__.core)) {
+    showModal(
+      "无法更新",
+      '<div class="modal-notes">请在安装版程序里使用「检查更新」。</div>',
+      [{ label: "知道了", primary: true, onClick: closeModal }]
+    );
     return;
   }
   try {
-    const res = await api().apply_update();
-    if (res && res.ok) {
-      showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
-    } else {
-      $("#upd-err").textContent = zhError((res && res.message) || "内置更新失败");
-    }
+    await window.__TAURI__.core.invoke("update_install");
+    showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
   } catch (e) {
-    $("#upd-err").textContent = zhError(e);
+    showModal(
+      "更新失败",
+      `<div class="modal-notes">${escapeAttr(zhError(e))}</div>`,
+      [{ label: "知道了", primary: true, onClick: closeModal }]
+    );
   }
 }
 
@@ -387,9 +352,10 @@ function bindStatic() {
     if (btn.dataset.act === "test") {
       const result = card.querySelector(".test-result");
       result.className = "test-result";
-      result.textContent = "测试中…";
+      result.textContent = "拉取模型并测试连接…";
       btn.disabled = true;
-      const res = await api().test_model(readModel(card));
+      const payload = readModel(card);
+      const res = await api().test_model(payload);
       btn.disabled = false;
       if (res.ok) {
         result.className = "test-result ok";
@@ -404,6 +370,7 @@ function bindStatic() {
       }
     }
   });
+
 
   $("#btn-test-token").addEventListener("click", async () => {
     const btn = $("#btn-test-token");
@@ -423,24 +390,43 @@ function bindStatic() {
   });
 
   $("#model-list").addEventListener("change", (e) => {
+    const card = e.target.closest(".model-card");
+    if (!card) return;
     const select = e.target.closest(".m-preset");
     if (!select) return;
-    const card = select.closest(".model-card");
-    if (!card) return;
     const preset = PROVIDERS.find((p) => p.label === select.value);
     if (!preset) return;
     card.querySelector(".m-base").value = preset.base;
     if (preset.name) card.querySelector(".m-name").value = preset.name;
-    const modelSel = card.querySelector(".m-model");
-    const models = preset.models.length ? preset.models : [];
-    if (modelSel) {
-      modelSel.innerHTML = models
-        .map((v, i) => `<option value="${escapeAttr(v)}" ${i === 0 ? "selected" : ""}>${escapeAttr(v)}</option>`)
-        .join("") || `<option value="">先填接口地址和 Key，再点测试连接</option>`;
-    }
     delete modelCache[card.dataset.id];
-    autoLoadModels();
+    const modelSel = card.querySelector(".m-model");
+    if (modelSel) {
+      modelSel.disabled = true;
+      modelSel.innerHTML = `<option value="">填写 API Key 后自动拉取</option>`;
+    }
+    const out = card.querySelector(".test-result");
+    if (out) {
+      out.className = "test-result";
+      out.textContent = "";
+    }
+    const key = card.querySelector(".m-key");
+    if (key && key.value.trim() && preset.base) fetchModels(card, false);
   });
+
+  $("#model-list").addEventListener(
+    "input",
+    (e) => {
+      if (!e.target.closest(".m-key")) return;
+      const card = e.target.closest(".model-card");
+      if (!card) return;
+      clearTimeout(card._fetchTimer);
+      card._fetchTimer = setTimeout(() => {
+        const payload = readModel(card);
+        if (payload.base_url && payload.api_key) fetchModels(card, true);
+      }, 700);
+    },
+    true
+  );
 
   $("#btn-test").addEventListener("click", async () => {
     const text = $("#test-input").value.trim();
@@ -525,11 +511,13 @@ function bindStatic() {
       }
     }
     if (!info) {
-      try {
-        info = await api().check_update();
-      } catch (e) {
-        info = { available: false, error: zhError(e) };
-      }
+      btn.disabled = false;
+      showModal(
+        "无法检查更新",
+        '<div class="modal-notes">请在安装版程序里使用「检查更新」。</div>',
+        [{ label: "知道了", primary: true, onClick: closeModal }]
+      );
+      return;
     }
     btn.disabled = false;
     if (info.available) {

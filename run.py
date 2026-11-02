@@ -33,11 +33,6 @@ def main() -> None:
         bot_main()
         return
 
-    if "--updater" in argv:
-        from app.console.updater_main import main as updater_main
-
-        sys.exit(updater_main())
-
     if "--serve" in argv:
         from app.console.serve import run as serve
 
