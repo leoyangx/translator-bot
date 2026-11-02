@@ -213,6 +213,7 @@ function renderFeatures() {
   const f = S.config.features || {};
   $("#f-bilingual").checked = !!f.bilingual;
   $("#f-copyblock").checked = f.copy_block !== false;
+  $("#f-keep-punct").checked = f.keep_punctuation !== false;
   $("#f-tone").checked = !!f.tone_buttons;
   $("#f-explain").checked = !!f.explain_button;
   $("#f-context").checked = !!f.context;
@@ -493,6 +494,7 @@ function collect() {
     features: {
       bilingual: $("#f-bilingual").checked,
       copy_block: $("#f-copyblock").checked,
+      keep_punctuation: $("#f-keep-punct").checked,
       tone_buttons: $("#f-tone").checked,
       explain_button: $("#f-explain").checked,
       glossary: $("#f-glossary").checked,

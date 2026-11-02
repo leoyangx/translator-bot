@@ -60,6 +60,7 @@ def build_messages(
     glossary: list[tuple[str, str]] | None = None,
     context: list[str] | None = None,
     template: str | None = None,
+    keep_punctuation: bool = True,
 ) -> list[dict]:
     template = (template or "").strip() or DEFAULT_TRANSLATION_PROMPT
     try:
@@ -76,6 +77,12 @@ def build_messages(
             tgt=language_name(tgt),
             tone=TONE_STYLES.get(tone, TONE_STYLES["natural"]),
             glossary=_glossary_block(glossary),
+        )
+
+    if keep_punctuation:
+        system += (
+            "\n9. 严格保留原文标点：原文用空格断句就保留空格；"
+            "原文没有逗号、句号的地方不要自行添加，也不要删改原有标点。"
         )
 
     user_parts: list[str] = []

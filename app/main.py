@@ -77,6 +77,7 @@ async def run() -> None:
         max_input_chars=cfg.features.max_input_chars,
         prompt_template=cfg.prompts.translation,
         explain_template=cfg.prompts.explain,
+        keep_punctuation=cfg.features.keep_punctuation,
     )
 
     session = AiohttpSession(proxy=cfg.proxy or None)

@@ -25,7 +25,7 @@
         <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg></span>语言
       </button>
       <button data-view="models">
-        <span class="ico"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>模型
+        <span class="ico"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>配置
       </button>
       <button data-view="features">
         <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg></span>功能
@@ -197,6 +197,10 @@
           <div class="switch-row">
             <div><div class="name">译文代码块</div><div class="desc">译文放进代码块，点一下即可复制</div></div>
             <label class="switch"><input type="checkbox" id="f-copyblock"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="name">保留原文标点</div><div class="desc">不自动添加原文没有的逗号、句号</div></div>
+            <label class="switch"><input type="checkbox" id="f-keep-punct"><span></span></label>
           </div>
           <div class="switch-row">
             <div><div class="name">语气按钮</div><div class="desc">更正式 / 更口语 / 直译</div></div>

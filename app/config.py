@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.0.7"
+APP_VERSION = "0.0.8"
 DEFAULT_UPDATE_REPO = "leoyangx/translator-bot"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
@@ -46,6 +46,7 @@ class LanguagesConfig:
 class FeaturesConfig:
     bilingual: bool = True
     copy_block: bool = True
+    keep_punctuation: bool = True
     tone_buttons: bool = True
     explain_button: bool = True
     glossary: bool = True
@@ -172,6 +173,7 @@ def config_from_dict(raw: dict[str, Any]) -> Config:
         features=FeaturesConfig(
             bilingual=bool(feat_raw.get("bilingual", legacy_tr.get("bilingual", True))),
             copy_block=bool(feat_raw.get("copy_block", True)),
+            keep_punctuation=bool(feat_raw.get("keep_punctuation", True)),
             tone_buttons=bool(feat_raw.get("tone_buttons", True)),
             explain_button=bool(feat_raw.get("explain_button", True)),
             glossary=bool(feat_raw.get("glossary", True)),

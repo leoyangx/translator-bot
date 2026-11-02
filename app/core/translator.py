@@ -71,6 +71,7 @@ class Translator:
         max_input_chars: int = 6000,
         prompt_template: str = "",
         explain_template: str = "",
+        keep_punctuation: bool = True,
     ) -> None:
         self._provider = provider
         self._repo = repo
@@ -79,6 +80,7 @@ class Translator:
         self._max_input_chars = max_input_chars
         self._prompt_template = prompt_template
         self._explain_template = explain_template
+        self._keep_punctuation = keep_punctuation
         self._prompt_hash = hashlib.sha256(
             f"{prompt_template}|{explain_template}".encode("utf-8")
         ).hexdigest()[:10]

@@ -299,6 +299,7 @@ class ConsoleApi:
                     max_input_chars=cfg.features.max_input_chars,
                     prompt_template=cfg.prompts.translation,
                     explain_template=cfg.prompts.explain,
+                    keep_punctuation=cfg.features.keep_punctuation,
                 )
                 started = time.perf_counter()
                 result = await translator.translate(
