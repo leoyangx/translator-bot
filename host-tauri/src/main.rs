@@ -234,12 +234,30 @@ async fn update_check(app: AppHandle) -> Result<UpdateInfo, String> {
         log_line(&home, &format!("update_check 失败: {e}"));
     }
     match checked {
-        Ok(Some(update)) => Ok(UpdateInfo {
-            available: true,
-            version: Some(update.version.clone()),
-            notes: update.body.clone(),
-            error: None,
-        }),
+        Ok(Some(update)) => {
+            let current = app.package_info().version.to_string();
+            let newer = match (
+                semver::Version::parse(&update.version),
+                semver::Version::parse(&current),
+            ) {
+                (Ok(remote), Ok(cur)) => remote > cur,
+                _ => true,
+            };
+            if !newer {
+                return Ok(UpdateInfo {
+                    available: false,
+                    version: None,
+                    notes: None,
+                    error: None,
+                });
+            }
+            Ok(UpdateInfo {
+                available: true,
+                version: Some(update.version.clone()),
+                notes: update.body.clone(),
+                error: None,
+            })
+        }
         Ok(None) => Ok(UpdateInfo {
             available: false,
             version: None,
@@ -265,6 +283,17 @@ async fn update_install(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .ok_or("已经是最新版本")?;
+    {
+        let current = app.package_info().version.to_string();
+        if let (Ok(remote), Ok(cur)) = (
+            semver::Version::parse(&update.version),
+            semver::Version::parse(&current),
+        ) {
+            if remote <= cur {
+                return Err("已经是最新版本".into());
+            }
+        }
+    }
     let handle = app.clone();
     let result = update
         .download_and_install(
