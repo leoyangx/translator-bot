@@ -89,13 +89,42 @@ function renderLanguages() {
   });
 }
 
+const PROVIDERS = [
+  { label: "DeepSeek 官方", name: "DeepSeek", base: "https://api.deepseek.com/v1", models: ["deepseek-chat", "deepseek-reasoner"] },
+  { label: "通义千问（阿里云）", name: "通义千问", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", models: ["qwen-plus", "qwen-max", "qwen-turbo"] },
+  { label: "智谱 GLM", name: "智谱", base: "https://open.bigmodel.cn/api/paas/v4", models: ["glm-4-plus", "glm-4-air", "glm-4-flash"] },
+  { label: "月之暗面 Kimi", name: "Kimi", base: "https://api.moonshot.cn/v1", models: ["moonshot-v1-8k", "moonshot-v1-32k"] },
+  { label: "OpenAI", name: "OpenAI", base: "https://api.openai.com/v1", models: ["gpt-4o-mini", "gpt-4o"] },
+  { label: "OpenRouter 中转", name: "OpenRouter", base: "https://openrouter.ai/api/v1", models: ["openai/gpt-4o-mini", "deepseek/deepseek-chat"] },
+  { label: "硅基流动 中转", name: "硅基流动", base: "https://api.siliconflow.cn/v1", models: ["deepseek-ai/DeepSeek-V3"] },
+  { label: "本地 Ollama", name: "Ollama", base: "http://127.0.0.1:11434/v1", models: ["qwen2.5:7b", "llama3.1:8b"] },
+  { label: "自定义 / 中转站", name: "", base: "", models: [] },
+];
+
+function providerFor(base) {
+  const value = (base || "").trim().replace(/\/$/, "");
+  if (!value) return null;
+  return PROVIDERS.find((p) => p.base && p.base.replace(/\/$/, "") === value) || null;
+}
+
+function presetOptions(m) {
+  const current = providerFor(m.base_url);
+  const label = current ? current.label : "自定义 / 中转站";
+  return PROVIDERS.map(
+    (p) => `<option value="${escapeAttr(p.label)}" ${p.label === label ? "selected" : ""}>${escapeAttr(p.label)}</option>`
+  ).join("");
+}
+
 const modelCache = {};
 
 function modelOptions(m) {
   const id = m.id || "";
-  const list = modelCache[id] || [];
+  const preset = providerFor(m.base_url);
+  const presetModels = preset ? preset.models : [];
+  const cached = modelCache[id] || [];
   const current = m.model || "";
-  const names = list.length ? list : current ? [current] : [];
+  const merged = Array.from(new Set([...cached, ...presetModels]));
+  const names = merged.length ? merged : current ? [current] : [];
   if (!names.length) return `<option value="">加载模型列表中…</option>`;
   return names
     .map(
@@ -181,6 +210,9 @@ function modelCard(m, index) {
         <label class="mini-radio"><input type="radio" name="default-model" ${m.default ? "checked" : ""}> 默认</label>
         <button class="btn danger" data-act="delete">删除</button>
       </div>
+      <label class="field" style="margin-bottom:10px">服务商预设
+        <select class="m-preset">${presetOptions(m)}</select>
+      </label>
       <div class="model-grid">
         <label class="field">接口地址<input class="m-base" value="${escapeAttr(m.base_url || "")}" placeholder="https://api.deepseek.com/v1"></label>
         <label class="field">模型名
@@ -278,17 +310,17 @@ async function startInstall() {
     '<div class="upd-bar"><i id="upd-bar-fill"></i></div><div class="hint" id="upd-text">准备中…</div><div class="hint" id="upd-err"></div>',
     [{ label: "后台下载", onClick: closeModal }]
   );
-  let nativeOk = false;
   if (window.__TAURI__ && window.__TAURI__.core) {
     try {
       await window.__TAURI__.core.invoke("update_install");
-      nativeOk = true;
+      showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
     } catch (e) {
-      nativeOk = false;
+      showModal(
+        "更新失败",
+        `<div class="modal-notes">${escapeAttr(zhError(e))}</div>`,
+        [{ label: "知道了", primary: true, onClick: closeModal }]
+      );
     }
-  }
-  if (nativeOk) {
-    showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
     return;
   }
   try {
@@ -296,8 +328,7 @@ async function startInstall() {
     if (res && res.ok) {
       showModal("更新已就绪", '<div class="modal-notes">程序会很快自动重启完成安装。</div>', []);
     } else {
-      const msg = (res && res.message) || "内置更新失败";
-      $("#upd-err").textContent = zhError(msg);
+      $("#upd-err").textContent = zhError((res && res.message) || "内置更新失败");
     }
   } catch (e) {
     $("#upd-err").textContent = zhError(e);
@@ -350,6 +381,9 @@ function bindStatic() {
       renderModels();
       return;
     }
+    if (btn.dataset.act === "preset") {
+      return;
+    }
     if (btn.dataset.act === "test") {
       const result = card.querySelector(".test-result");
       result.className = "test-result";
@@ -386,6 +420,26 @@ function bindStatic() {
       out.textContent = "检测失败：" + zhError(e);
     }
     btn.disabled = false;
+  });
+
+  $("#model-list").addEventListener("change", (e) => {
+    const select = e.target.closest(".m-preset");
+    if (!select) return;
+    const card = select.closest(".model-card");
+    if (!card) return;
+    const preset = PROVIDERS.find((p) => p.label === select.value);
+    if (!preset) return;
+    card.querySelector(".m-base").value = preset.base;
+    if (preset.name) card.querySelector(".m-name").value = preset.name;
+    const modelSel = card.querySelector(".m-model");
+    const models = preset.models.length ? preset.models : [];
+    if (modelSel) {
+      modelSel.innerHTML = models
+        .map((v, i) => `<option value="${escapeAttr(v)}" ${i === 0 ? "selected" : ""}>${escapeAttr(v)}</option>`)
+        .join("") || `<option value="">先填接口地址和 Key，再点测试连接</option>`;
+    }
+    delete modelCache[card.dataset.id];
+    autoLoadModels();
   });
 
   $("#btn-test").addEventListener("click", async () => {

@@ -209,7 +209,11 @@ async fn update_check(app: AppHandle) -> Result<UpdateInfo, String> {
         }
     };
     let updater = updater_for(&app, &base).await?;
-    match updater.check().await {
+    let checked = updater.check().await;
+    if let Err(e) = &checked {
+        log_line(&home, &format!("update_check 失败: {e}"));
+    }
+    match checked {
         Ok(Some(update)) => Ok(UpdateInfo {
             available: true,
             version: Some(update.version.clone()),
@@ -242,7 +246,7 @@ async fn update_install(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .ok_or("已经是最新版本")?;
     let handle = app.clone();
-    update
+    let result = update
         .download_and_install(
             move |chunk, total| {
                 let _ = handle.emit(
@@ -252,8 +256,11 @@ async fn update_install(app: AppHandle) -> Result<(), String> {
             },
             || {},
         )
-        .await
-        .map_err(|e| e.to_string())?;
+        .await;
+    if let Err(e) = result {
+        log_line(&home, &format!("update_install 失败: {e}"));
+        return Err(e.to_string());
+    }
     app.restart()
 }
 
