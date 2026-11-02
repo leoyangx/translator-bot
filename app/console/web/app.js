@@ -1,9 +1,26 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+function dbg(msg) {
+  let el = document.getElementById("dbg");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "dbg";
+    el.style.cssText =
+      "position:fixed;left:0;bottom:0;right:0;z-index:9999;background:rgba(0,0,0,.85);color:#ff8080;font:11px/1.5 monospace;padding:6px;white-space:pre-wrap;max-height:40vh;overflow:auto";
+    document.body.appendChild(el);
+  }
+  el.textContent += msg + "\n";
+}
+
 async function rpc(method, ...args) {
   if (window.__TAURI__ && window.__TAURI__.core) {
-    return await window.__TAURI__.core.invoke("backend_call", { method, args });
+    try {
+      return await window.__TAURI__.core.invoke("backend_call", { method, args });
+    } catch (e) {
+      dbg("invoke " + method + " -> " + (e && (e.message || e)));
+      throw e;
+    }
   }
   const res = await fetch(`/api/${method}`, {
     method: "POST",
@@ -18,6 +35,10 @@ const api = () => {
   return new Proxy({}, { get: (_, method) => (...args) => rpc(method, ...args) });
 };
 
+dbg("boot: tauri=" + (!!(window.__TAURI__ && window.__TAURI__.core)));
+window.addEventListener("error", (e) => dbg("ERR " + e.message + " @" + e.filename + ":" + e.lineno));
+window.addEventListener("unhandledrejection", (e) => dbg("REJ " + (e.reason && (e.reason.message || e.reason))));
+
 let S = { config: null, languages: [], tones: [], defaults: {} };
 let booted = false;
 
@@ -31,12 +52,15 @@ window.addEventListener("pywebviewready", bootReady);
 document.addEventListener("DOMContentLoaded", () => setTimeout(bootReady, 60));
 
 async function init() {
+  dbg("init start");
   try {
     S = await api().get_state();
   } catch (err) {
+    dbg("init get_state failed: " + err);
     toast("读取配置失败：" + err, "err");
     return;
   }
+  dbg("init state: " + typeof S + " version=" + (S && S.version));
   S.config = S.config || {};
   S.config.app = S.config.app || {};
   renderAll();
