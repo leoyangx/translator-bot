@@ -113,7 +113,7 @@ pub async fn test_translate(
     text: String,
     tone: String,
 ) -> Result<Value, String> {
-    let cfg = state.cfg.lock().map(|c| c.clone()).unwrap_or_default();
+    let cfg = crate::config::load_config(&state.root).unwrap_or_default();
     let model = match cfg.default_model() {
         Some(m) => m.clone(),
         None => return Err("还没有可用的模型，请先到「配置」页填写 API Key".into()),
@@ -206,7 +206,11 @@ pub fn start_bot(state: State<'_, AppState>) -> serde_json::Value {
     if state.bot.lock().map(|b| b.is_some()).unwrap_or(false) {
         return serde_json::json!({ "ok": true, "message": "已经在运行" });
     }
-    let cfg = state.cfg.lock().map(|c| c.clone()).unwrap_or_default();
+    // 以磁盘上的配置为准：界面保存后由后端写盘，内存快照可能是旧的
+    let cfg = crate::config::load_config(&state.root).unwrap_or_default();
+    if let Ok(mut guard) = state.cfg.lock() {
+        *guard = cfg.clone();
+    }
     if cfg.telegram.token.trim().is_empty() {
         return serde_json::json!({ "ok": false, "message": "还没填 Telegram Bot Token" });
     }
