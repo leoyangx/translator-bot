@@ -34,6 +34,10 @@ fn default_history() -> usize {
     3
 }
 
+fn default_tone() -> String {
+    "natural".into()
+}
+
 fn default_update_mode() -> String {
     "auto".into()
 }
@@ -104,6 +108,8 @@ pub struct FeaturesConfig {
     pub group_mode: String,
     pub max_input_chars: usize,
     pub history_size: usize,
+    #[serde(default = "default_tone")]
+    pub default_tone: String,
 }
 
 impl Default for FeaturesConfig {
@@ -120,6 +126,7 @@ impl Default for FeaturesConfig {
             group_mode: default_group_mode(),
             max_input_chars: default_max_chars(),
             history_size: default_history(),
+            default_tone: default_tone(),
         }
     }
 }

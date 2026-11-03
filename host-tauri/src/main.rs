@@ -382,7 +382,7 @@ fn main() {
             if autostart {
                 if let Some(token) = crate::bot::spawn(crate::bot::BotCtx {
                     root: home.clone(),
-                    cfg: cfg.clone(),
+                    cfg: std::sync::Mutex::new(cfg.clone()),
                 }) {
                     let state = app.state::<commands::AppState>();
                     if let Ok(mut guard) = state.bot.lock() {

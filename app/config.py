@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.1.0-rc.10"
+APP_VERSION = "0.1.0-rc.11"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
 

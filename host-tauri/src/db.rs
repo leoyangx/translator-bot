@@ -25,6 +25,10 @@ impl Db {
              CREATE TABLE IF NOT EXISTS glossary (
                source TEXT PRIMARY KEY,
                target TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS usage (
+               day TEXT PRIMARY KEY,
+               count INTEGER NOT NULL DEFAULT 0
              );",
         )?;
         Ok(Self { conn: Mutex::new(conn) })
@@ -75,4 +79,95 @@ impl Db {
             );
         }
     }
+}
+
+impl Db {
+    pub fn bump_usage(&self) {
+        let day = {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            // 粗略按 UTC+8 计日
+            let days = (now + 8 * 3600) / 86400;
+            let secs = days * 86400;
+            let dt = time_from_unix(secs);
+            format!("{}-{:02}-{:02}", dt.0, dt.1, dt.2)
+        };
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute(
+                "INSERT INTO usage (day, count) VALUES (?1, 1)
+                 ON CONFLICT(day) DO UPDATE SET count = count + 1",
+                rusqlite::params![day],
+            );
+        }
+    }
+
+    pub fn usage_today(&self) -> i64 {
+        let day = {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let days = (now + 8 * 3600) / 86400;
+            let secs = days * 86400;
+            let dt = time_from_unix(secs);
+            format!("{}-{:02}-{:02}", dt.0, dt.1, dt.2)
+        };
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        conn.query_row(
+            "SELECT count FROM usage WHERE day = ?1",
+            rusqlite::params![day],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+    }
+
+    pub fn cache_count(&self) -> i64 {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        conn.query_row("SELECT COUNT(*) FROM cache", [], |row| row.get::<_, i64>(0))
+            .unwrap_or(0)
+    }
+
+    pub fn glossary_put(&self, source: &str, target: &str) {
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO glossary (source, target) VALUES (?1, ?2)",
+                rusqlite::params![source, target],
+            );
+        }
+    }
+}
+
+fn time_from_unix(secs: u64) -> (i64, u32, u32) {
+    // 简化版公历换算（1970-2100 范围内够用）
+    let days = (secs / 86400) as i64;
+    let mut year = 1970i64;
+    let mut remaining = days;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let year_days = if leap { 366 } else { 365 };
+        if remaining < year_days {
+            break;
+        }
+        remaining -= year_days;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let months = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 0usize;
+    for (i, m) in months.iter().enumerate() {
+        if remaining < *m as i64 {
+            month = i;
+            break;
+        }
+        remaining -= *m as i64;
+    }
+    (year, (month + 1) as u32, (remaining + 1) as u32)
 }
