@@ -452,10 +452,9 @@ function bindStatic() {
         const sec = Math.floor((Date.now() - startedAt) / 1000);
         result.textContent = `拉取模型并测试连接… ${sec} 秒`;
       }, 500);
-      const payload = readModel(card);
       let res;
       try {
-        res = await api().test_model(payload);
+        res = await api().test_model(readModel(card));
       } catch (e) {
         res = { ok: false, message: zhError(e) };
       } finally {
@@ -672,14 +671,19 @@ function switchView(name) {
 }
 
 function readModel(card) {
+  const pick = (sel, fallback = "") => {
+    const el = card.querySelector(sel);
+    return el ? String(el.value || "").trim() : fallback;
+  };
+  const titleEl = card.querySelector(".model-title");
   return {
-    id: card.dataset.id,
-    name: card.dataset.name || card.querySelector(".model-title").textContent.trim(),
-    base_url: card.querySelector(".m-base").value.trim(),
-    model: card.querySelector(".m-model").value.trim(),
-    api_key: card.querySelector(".m-key").value.trim(),
-    kind: card.querySelector(".m-kind").value,
-    default: card.querySelector('input[name="default-model"]').checked,
+    id: card.dataset.id || "",
+    name: card.dataset.name || (titleEl ? titleEl.textContent.trim() : "模型"),
+    base_url: pick(".m-base"),
+    model: pick(".m-model"),
+    api_key: pick(".m-key"),
+    kind: pick(".m-kind", "text") || "text",
+    default: !!(card.querySelector('input[name="default-model"]') || {}).checked,
   };
 }
 
