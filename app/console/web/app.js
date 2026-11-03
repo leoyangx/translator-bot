@@ -349,6 +349,7 @@ function showModal(title, bodyHtml, actions) {
 
 function renderUpdate(info) {
   if (!info || !info.available) return;
+  S.pendingUpdateVersion = info.version;
   const notes = (info.notes || "包含若干体验改进与问题修复。").slice(0, 400);
   showModal(
     `发现新版本 v${info.version}`,
@@ -361,6 +362,12 @@ function renderUpdate(info) {
 }
 
 async function startInstall() {
+  if (S.version && S.pendingUpdateVersion &&
+      String(S.pendingUpdateVersion).trim().toLowerCase() === String(S.version).trim().toLowerCase()) {
+    showModal("已经是最新版本", '<div class="modal-notes">当前版本已经是最新的了。</div>',
+      [{ label: "知道了", primary: true, onClick: closeModal }]);
+    return;
+  }
   showModal(
     "正在下载更新",
     '<div class="upd-bar"><i id="upd-bar-fill"></i></div><div class="hint" id="upd-text">准备中…</div>',
@@ -438,11 +445,23 @@ function bindStatic() {
     if (btn.dataset.act === "test") {
       const result = card.querySelector(".test-result");
       result.className = "test-result";
-      result.textContent = "拉取模型并测试连接…";
+      result.textContent = "拉取模型并测试连接… 0 秒";
       btn.disabled = true;
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        const sec = Math.floor((Date.now() - startedAt) / 1000);
+        result.textContent = `拉取模型并测试连接… ${sec} 秒`;
+      }, 500);
       const payload = readModel(card);
-      const res = await api().test_model(payload);
-      btn.disabled = false;
+      let res;
+      try {
+        res = await api().test_model(payload);
+      } catch (e) {
+        res = { ok: false, message: zhError(e) };
+      } finally {
+        clearInterval(timer);
+        btn.disabled = false;
+      }
       if (res.ok) {
         result.className = "test-result ok";
         result.textContent = `${res.message} · 可用模型 ${(res.models || []).length} 个`;
@@ -608,6 +627,13 @@ function bindStatic() {
       return;
     }
     btn.disabled = false;
+    const sameVersion =
+      info.version && S.version &&
+      String(info.version).trim().toLowerCase() === String(S.version).trim().toLowerCase();
+    if (info.available && sameVersion) {
+      info.available = false;
+      info.version = null;
+    }
     if (info.available) {
       renderUpdate(info);
       toast(`发现新版本 v${info.version}`, "ok");

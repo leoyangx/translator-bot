@@ -171,13 +171,16 @@ pub async fn backend_call(
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client
+    let request = client
         .post(url)
         .header("X-Console", "1")
         .json(&args)
-        .send()
-        .await
-        .map_err(|e| format!("本地服务连接失败：{e}"))?;
+        .send();
+    let resp = match tokio::time::timeout(std::time::Duration::from_secs(75), request).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => return Err(format!("本地服务连接失败：{e}")),
+        Err(_) => return Err("操作超时（75 秒），请检查网络或模型接口".into()),
+    };
     if !resp.status().is_success() {
         return Err(format!("本地服务返回 HTTP {}", resp.status()));
     }

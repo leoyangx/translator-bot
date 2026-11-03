@@ -308,7 +308,7 @@ class ConsoleApi:
 
         async def run() -> dict[str, Any]:
             provider = OpenAICompatProvider(
-                model.base_url, model.api_key, model.model, timeout=45, proxy=cfg.proxy or None
+                model.base_url, model.api_key, model.model, timeout=20, proxy=cfg.proxy or None
             )
             db = Database(self.root / "data" / "bot.db")
             db.connect()
