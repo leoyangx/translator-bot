@@ -20,6 +20,10 @@ fn collect(dir: &Path, prefix: &str, out: &mut Vec<(PathBuf, String)>) {
 }
 
 fn main() {
+    if !std::path::Path::new("../dist/TranslatorBotBackend").exists() {
+        println!("cargo:rerun-if-changed=../dist/TranslatorBotBackend");
+        return;
+    }
     tauri_build::build();
 
     // 把 PyInstaller 打好的后端目录压进 exe，安装目录就只剩一个 exe

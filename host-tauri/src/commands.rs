@@ -26,9 +26,19 @@ fn err(message: impl Into<String>) -> Value {
 #[tauri::command]
 pub fn get_state(state: State<'_, AppState>) -> Value {
     let cfg = state.cfg.lock().map(|c| c.clone()).unwrap_or_default();
+    let languages: Vec<Value> = crate::languages::LANGUAGES
+        .iter()
+        .map(|l| json!({ "code": l.code, "name": l.zh }))
+        .collect();
+    let tones: Vec<Value> = crate::prompts::TONE_NAMES
+        .iter()
+        .map(|(key, name)| json!({ "key": key, "name": name }))
+        .collect();
     json!({
         "version": APP_VERSION,
         "config": cfg,
+        "languages": languages,
+        "tones": tones,
         "defaults": {
             "translation_prompt": DEFAULT_TRANSLATION_PROMPT,
             "explain_prompt": DEFAULT_EXPLAIN_PROMPT,
@@ -265,4 +275,184 @@ pub fn bot_status(state: State<'_, AppState>) -> serde_json::Value {
         "started_at": started_at,
         "pid": if running { std::process::id() } else { 0 },
     })
+}
+
+fn now_day() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() + 8 * 3600)
+        .unwrap_or(0);
+    let days = secs / 86400;
+    let mut year = 1970i64;
+    let mut rem = days as i64;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let yd = if leap { 366 } else { 365 };
+        if rem < yd { break; }
+        rem -= yd;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let months = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut m = 0usize;
+    for (i, mm) in months.iter().enumerate() {
+        if rem < *mm as i64 { m = i; break; }
+        rem -= *mm as i64;
+    }
+    format!("{}-{:02}-{:02}", year, m + 1, rem + 1)
+}
+
+#[tauri::command]
+pub fn get_stats(state: State<'_, AppState>) -> Value {
+    let db = Db::open(&state.root.join("data").join("bot.db")).ok();
+    let (calls, cache, glossary) = match &db {
+        Some(db) => (db.usage_today(), db.cache_count(), db.glossary().len()),
+        None => (0, 0, 0),
+    };
+    let _ = now_day();
+    json!({ "today_calls": calls, "today_tokens": 0, "cache": cache, "glossary": glossary })
+}
+
+#[tauri::command]
+pub fn read_logs(state: State<'_, AppState>, limit: usize) -> Vec<String> {
+    let path = state.root.join("logs").join("host.log");
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+    let start = lines.len().saturating_sub(limit.max(1));
+    lines[start..].to_vec()
+}
+
+#[tauri::command]
+pub async fn test_token(token: String) -> Value {
+    let token = token.trim().to_string();
+    if token.is_empty() {
+        return err("先填 Bot Token");
+    }
+    let url = format!("https://api.telegram.org/bot{token}/getMe");
+    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build() {
+        Ok(c) => c,
+        Err(e) => return err(e.to_string()),
+    };
+    match client.get(url).send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            let body: Value = resp.json().await.unwrap_or(Value::Null);
+            if status.is_success() && body["ok"].as_bool().unwrap_or(false) {
+                let username = body["result"]["username"].as_str().unwrap_or("");
+                json!({ "ok": true, "message": format!("已连接 @{username}") })
+            } else {
+                err("Token 无效或已被撤销")
+            }
+        }
+        Err(e) => err(format!("连接 Telegram 失败：{e}")),
+    }
+}
+
+#[tauri::command]
+pub fn open_folder(state: State<'_, AppState>, kind: String) -> Value {
+    let path = match kind.as_str() {
+        "root" => state.root.clone(),
+        "data" => state.root.join("data"),
+        _ => state.root.join("logs"),
+    };
+    let _ = std::fs::create_dir_all(&path);
+    let _ = std::process::Command::new("explorer").arg(&path).spawn();
+    json!({ "ok": true, "path": path.to_string_lossy() })
+}
+
+#[tauri::command]
+pub fn export_diagnostics(state: State<'_, AppState>) -> Value {
+    let dir = state.root.join("data").join("diagnostics");
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::copy(state.root.join("config.yaml"), dir.join("config.yaml"));
+    let _ = std::fs::copy(state.root.join("logs").join("host.log"), dir.join("host.log"));
+    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+    json!({ "ok": true, "path": dir.to_string_lossy() })
+}
+
+fn autostart_cmd() -> String {
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run".to_string()
+}
+
+#[tauri::command]
+pub fn get_autostart() -> Value {
+    let output = std::process::Command::new("reg")
+        .args(["query", &autostart_cmd(), "/v", "TranslatorBot"])
+        .output();
+    let enabled = matches!(output, Ok(o) if o.status.success());
+    json!({ "enabled": enabled })
+}
+
+#[tauri::command]
+pub fn set_autostart(enabled: bool) -> Value {
+    let exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let status = if enabled {
+        std::process::Command::new("reg")
+            .args(["add", &autostart_cmd(), "/v", "TranslatorBot", "/t", "REG_SZ", "/d", &exe, "/f"])
+            .status()
+    } else {
+        std::process::Command::new("reg")
+            .args(["delete", &autostart_cmd(), "/v", "TranslatorBot", "/f"])
+            .status()
+    };
+    json!({ "ok": matches!(status, Ok(s) if s.success()), "enabled": enabled })
+}
+
+#[tauri::command]
+pub async fn ui_call(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    method: String,
+    args: Vec<Value>,
+) -> Result<Value, String> {
+    let arg0 = args.first().cloned().unwrap_or(Value::Null);
+    let result = match method.as_str() {
+        "get_state" => get_state(state),
+        "save_config" => {
+            let cfg: Config = serde_json::from_value(arg0).map_err(|e| e.to_string())?;
+            save_config(state, cfg)
+        }
+        "validate" => {
+            let cfg: Config = serde_json::from_value(arg0).map_err(|e| e.to_string())?;
+            validate_config(cfg)
+        }
+        "list_models" => {
+            let base = arg0["base_url"].as_str().unwrap_or("").to_string();
+            let key = arg0["api_key"].as_str().unwrap_or("").to_string();
+            list_models(base, key, String::new()).await
+        }
+        "test_model" => {
+            let base = arg0["base_url"].as_str().unwrap_or("").to_string();
+            let key = arg0["api_key"].as_str().unwrap_or("").to_string();
+            let model = arg0["model"].as_str().unwrap_or("").to_string();
+            test_model(base, key, model, String::new()).await
+        }
+        "test_translate" => {
+            let text = arg0.as_str().or_else(|| arg0["text"].as_str()).unwrap_or("").to_string();
+            let tone = args.get(1).and_then(|v| v.as_str()).unwrap_or("natural").to_string();
+            test_translate(state, text, tone).await?
+        }
+        "get_stats" => get_stats(state),
+        "read_logs" => {
+            let limit = arg0.as_u64().unwrap_or(200) as usize;
+            json!(read_logs(state, limit))
+        }
+        "test_token" => test_token(arg0.as_str().unwrap_or("").to_string()).await,
+        "open_folder" => open_folder(state, arg0.as_str().unwrap_or("logs").to_string()),
+        "export_diagnostics" => export_diagnostics(state),
+        "get_autostart" => get_autostart(),
+        "set_autostart" => set_autostart(arg0.as_bool().unwrap_or(false)),
+        "start_bot" => start_bot(state),
+        "stop_bot" => stop_bot(state),
+        "restart_bot" => restart_bot(state),
+        "bot_status" => bot_status(state),
+        "quit_app" => {
+            app.exit(0);
+            json!({ "ok": true })
+        }
+        other => return Err(format!("未支持的方法：{other}")),
+    };
+    Ok(result)
 }

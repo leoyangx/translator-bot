@@ -19,20 +19,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-
-      - name: Build backend
-        run: >
-          python -m PyInstaller --noconfirm --clean --windowed
-          --name TranslatorBotBackend
-          --add-data "app/console/web;app/console/web"
-          --add-data "assets;assets"
-          --collect-all langdetect
-          run.py
-
       - name: Install Rust
         shell: pwsh
         run: |

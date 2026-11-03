@@ -340,7 +340,15 @@ fn main() {
             commands::start_bot,
             commands::stop_bot,
             commands::restart_bot,
-            commands::bot_status
+            commands::bot_status,
+            commands::get_stats,
+            commands::read_logs,
+            commands::test_token,
+            commands::open_folder,
+            commands::export_diagnostics,
+            commands::get_autostart,
+            commands::set_autostart,
+            commands::ui_call
         ])
         .setup(|app| {
             let exe = exe_dir();
@@ -351,34 +359,16 @@ fn main() {
             };
             log_line(&home, &format!("Tauri 宿主启动 v{}", VERSION));
 
-            let backend = if home == exe {
-                exe.join("backend").join("TranslatorBotBackend.exe")
-            } else {
-                ensure_payload(&home)?
-            };
-
             kill_stale_backend();
             let cfg = crate::config::load_config(&home).unwrap_or_default();
-            let child = start_backend(&home, &backend).ok_or("后端启动失败")?;
-            let url = wait_for_port(&home, Duration::from_secs(60)).ok_or("后端未就绪")?;
-            log_line(&home, &format!("backend ready: {}", url));
-            let port: u16 = url
-                .trim_end_matches('/')
-                .rsplit(':')
-                .next()
-                .and_then(|p| p.parse().ok())
-                .unwrap_or(0);
             let autostart = cfg.app.autostart_bot && !cfg.telegram.token.trim().is_empty();
             app.manage(commands::AppState {
                 root: home.clone(),
                 cfg: std::sync::Mutex::new(cfg.clone()),
-                port: std::sync::Mutex::new(if port == 0 { None } else { Some(port) }),
+                port: std::sync::Mutex::new(None),
                 bot: std::sync::Mutex::new(None),
                 bot_started_at: std::sync::Mutex::new(None),
             });
-            app.manage(Backend(Mutex::new(Some(child))));
-
-            let icon = Image::from_bytes(ICON_PNG)?;
             if autostart {
                 if let Some(token) = crate::bot::spawn(crate::bot::BotCtx {
                     root: home.clone(),
@@ -394,6 +384,8 @@ fn main() {
                     log_line(&home, "机器人已自动启动");
                 }
             }
+
+            let icon = Image::from_bytes(ICON_PNG).map_err(|e| format!("图标加载失败: {e}"))?;
 
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title(TITLE)
