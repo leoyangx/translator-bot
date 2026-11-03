@@ -224,7 +224,11 @@ pub fn start_bot(state: State<'_, AppState>) -> serde_json::Value {
     if cfg.telegram.token.trim().is_empty() {
         return serde_json::json!({ "ok": false, "message": "还没填 Telegram Bot Token" });
     }
-    let ctx = crate::bot::BotCtx { root: state.root.clone(), cfg: std::sync::Mutex::new(cfg) };
+    let ctx = crate::bot::BotCtx {
+        root: state.root.clone(),
+        cfg: std::sync::Mutex::new(cfg),
+        last_text: std::sync::Mutex::new(std::collections::HashMap::new()),
+    };
     match crate::bot::spawn(ctx) {
         Some(token) => {
             if let Ok(mut guard) = state.bot.lock() {

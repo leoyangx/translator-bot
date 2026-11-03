@@ -336,6 +336,7 @@ fn main() {
                 if let Some(token) = crate::bot::spawn(crate::bot::BotCtx {
                     root: home.clone(),
                     cfg: std::sync::Mutex::new(cfg.clone()),
+                    last_text: std::sync::Mutex::new(std::collections::HashMap::new()),
                 }) {
                     let state = app.state::<commands::AppState>();
                     if let Ok(mut guard) = state.bot.lock() {
