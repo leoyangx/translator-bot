@@ -54,13 +54,43 @@ fn intro_text(cfg: &Config) -> String {
         .map(|c| language_name(c))
         .collect::<Vec<_>>()
         .join(" / ");
+    let mine = language_name(&cfg.languages.mine);
     format!(
-        "<b>翻译机器人</b>\n\n把要翻译的话直接发给我：\n· {partners} → {mine}\n· {mine} → {partner}\n\n当前语气：{tone}\n直接发消息即可翻译。",
+"<b>翻译机器人</b>
+
+直接发消息就能翻译：
+· {partners} → {mine}
+· {mine} → {partners_first}
+
+<b>能做什么</b>
+· 自动识别语种，双向翻译，不用手动选
+· 语气可切换：自然 / 正式 / 口语 / 直译
+· 术语表：专有名词按你的译法固定翻译
+· 上下文记忆：连着聊也能译准省略句
+· 翻译缓存：重复内容秒回，不重复计费
+
+<b>怎么用</b>
+· 私聊直接发文字
+· 群里 @我 或回复我的消息
+· 下面的按钮可以改语言、语气、看术语表和用量
+
+当前语气：{tone}",
         partners = partners,
-        mine = language_name(&cfg.languages.mine),
-        partner = language_name(cfg.languages.partners.first().map(|s| s.as_str()).unwrap_or("en")),
+        mine = mine,
+        partners_first = language_name(cfg.languages.partners.first().map(|s| s.as_str()).unwrap_or("en")),
         tone = tone_name(&cfg.features.default_tone),
     )
+}
+
+/// 输入栏下方常驻按钮
+fn main_keyboard() -> teloxide::types::KeyboardMarkup {
+    use teloxide::types::{KeyboardButton, KeyboardMarkup};
+    KeyboardMarkup::new(vec![
+        vec![KeyboardButton::new("🌐 语言"), KeyboardButton::new("🎚 语气")],
+        vec![KeyboardButton::new("📖 术语表"), KeyboardButton::new("📊 今日用量")],
+        vec![KeyboardButton::new("❓ 使用说明")],
+    ])
+    .resize_keyboard()
 }
 
 fn main_menu() -> InlineKeyboardMarkup {
@@ -118,6 +148,9 @@ async fn handle_command(bot: Bot, msg: Message, cmd: Cmd, ctx: Arc<BotCtx>) -> R
         Cmd::Start | Cmd::Menu => {
             bot.send_message(msg.chat.id, intro_text(&cfg))
                 .parse_mode(ParseMode::Html)
+                .reply_markup(main_keyboard())
+                .await?;
+            bot.send_message(msg.chat.id, "设置菜单")
                 .reply_markup(main_menu())
                 .await?;
         }
@@ -214,11 +247,50 @@ async fn handle_message(bot: Bot, msg: Message, ctx: Arc<BotCtx>) -> ResponseRes
             .await?;
         return Ok(());
     }
+    let cfg = ctx.cfg.lock().map(|c| c.clone()).unwrap_or_default();
+
+    // 输入栏下方的常驻按钮，按文字匹配
+    match text.as_str() {
+        "🌐 语言" => {
+            bot.send_message(msg.chat.id, "选择你的语言（对方语言会跟着换）")
+                .reply_markup(lang_menu())
+                .await?;
+            return Ok(());
+        }
+        "🎚 语气" => {
+            bot.send_message(msg.chat.id, "选择默认翻译语气")
+                .reply_markup(tone_menu())
+                .await?;
+            return Ok(());
+        }
+        "📖 术语表" => {
+            bot.send_message(msg.chat.id, glossary_text(&ctx))
+                .parse_mode(ParseMode::Html)
+                .reply_markup(back_menu())
+                .await?;
+            return Ok(());
+        }
+        "📊 今日用量" => {
+            bot.send_message(msg.chat.id, stats_text(&ctx))
+                .parse_mode(ParseMode::Html)
+                .reply_markup(back_menu())
+                .await?;
+            return Ok(());
+        }
+        "❓ 使用说明" => {
+            bot.send_message(msg.chat.id, intro_text(&cfg))
+                .parse_mode(ParseMode::Html)
+                .reply_markup(main_menu())
+                .await?;
+            return Ok(());
+        }
+        _ => {}
+    }
+
     if text.starts_with('/') {
         return Ok(());
     }
 
-    let cfg = ctx.cfg.lock().map(|c| c.clone()).unwrap_or_default();
     let model = match cfg.default_model() {
         Some(m) => m.clone(),
         None => {
