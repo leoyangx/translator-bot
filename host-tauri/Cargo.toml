@@ -6,7 +6,6 @@ description = "Translation bot desktop shell"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [[bin]]
 name = "TranslatorBot"
