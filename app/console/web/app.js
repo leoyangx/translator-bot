@@ -306,6 +306,7 @@ function renderFeatures() {
   const f = S.config.features || {};
   $("#f-bilingual").checked = !!f.bilingual;
   $("#f-copyblock").checked = f.copy_block !== false;
+  if ($("#f-default-tone")) $("#f-default-tone").value = f.default_tone || "natural";
   $("#f-tone").checked = !!f.tone_buttons;
   $("#f-explain").checked = !!f.explain_button;
   $("#f-context").checked = !!f.context;
@@ -714,6 +715,7 @@ function collect() {
     features: {
       bilingual: $("#f-bilingual").checked,
       copy_block: $("#f-copyblock").checked,
+      default_tone: $("#f-default-tone") ? $("#f-default-tone").value : "natural",
       tone_buttons: $("#f-tone").checked,
       explain_button: $("#f-explain").checked,
       glossary: $("#f-glossary").checked,

@@ -478,3 +478,13 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   border-color: rgba(248, 113, 113, 0.45);
   background: rgba(248, 113, 113, 0.08);
 }
+
+.mini-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  min-width: 110px;
+}

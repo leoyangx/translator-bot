@@ -10,7 +10,7 @@ import yaml
 
 from .core.languages import LANGUAGES
 
-APP_VERSION = "0.1.0-rc.12"
+APP_VERSION = "0.1.0-rc.13"
 DEFAULT_CONFIG_PATH = "config.yaml"
 
 
@@ -54,6 +54,7 @@ class FeaturesConfig:
     group_mode: str = "reply_or_mention"
     max_input_chars: int = 6000
     history_size: int = 3
+    default_tone: str = "natural"
 
 
 @dataclass(slots=True)
