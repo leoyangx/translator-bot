@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.1.0-rc.9
+
+### 架构
+
+- 接入 **teloxide**：机器人开始在 Rust 主进程内运行，不再拉起 Python 子进程
+- 新增原生命令 `start_bot` / `stop_bot` / `restart_bot` / `bot_status`，界面「启动 / 重启 / 停止」直连 Rust
+- 翻译链路复用 Rust 侧 `provider` + `translator` + `db`：收消息 → 判方向 → 调模型 → 回复
+- 停止采用 teloxide 的优雅退出（`ShutdownToken`），不再强杀进程
+
+### 说明
+
+- 目前覆盖：私聊/群聊文本翻译、`/start`、`/help`；多语言命令（`/lang`、`/tone`、`/glossary`、`/stats`）后续补齐
+- 术语表、提示词编辑等页面仍由 Python 后端提供，等 Rust 侧对齐后删除 Python
+
 ## 0.1.0-rc.8
 
 ### 修复

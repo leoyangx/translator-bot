@@ -15,6 +15,8 @@ pub struct AppState {
     pub root: std::path::PathBuf,
     pub cfg: Mutex<Config>,
     pub port: Mutex<Option<u16>>,
+    pub bot: Mutex<Option<teloxide::dispatching::ShutdownToken>>,
+    pub bot_started_at: Mutex<Option<u64>>,
 }
 
 fn err(message: impl Into<String>) -> Value {
@@ -197,4 +199,66 @@ pub fn front_log(state: State<'_, AppState>, message: String) {
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(file, "[ui] {message}");
     }
+}
+
+#[tauri::command]
+pub fn start_bot(state: State<'_, AppState>) -> serde_json::Value {
+    if state.bot.lock().map(|b| b.is_some()).unwrap_or(false) {
+        return serde_json::json!({ "ok": true, "message": "已经在运行" });
+    }
+    let cfg = state.cfg.lock().map(|c| c.clone()).unwrap_or_default();
+    if cfg.telegram.token.trim().is_empty() {
+        return serde_json::json!({ "ok": false, "message": "还没填 Telegram Bot Token" });
+    }
+    let ctx = crate::bot::BotCtx { root: state.root.clone(), cfg };
+    match crate::bot::spawn(ctx) {
+        Some(token) => {
+            if let Ok(mut guard) = state.bot.lock() {
+                *guard = Some(token);
+            }
+            if let Ok(mut started) = state.bot_started_at.lock() {
+                *started = Some(crate::bot::started_at_now());
+            }
+            serde_json::json!({ "ok": true, "message": "已启动" })
+        }
+        None => serde_json::json!({ "ok": false, "message": "启动失败：Token 无效" }),
+    }
+}
+
+#[tauri::command]
+pub fn stop_bot(state: State<'_, AppState>) -> serde_json::Value {
+    let token = state.bot.lock().ok().and_then(|mut b| b.take());
+    match token {
+        Some(t) => {
+            let _ = t.shutdown();
+            if let Ok(mut started) = state.bot_started_at.lock() {
+                *started = None;
+            }
+            serde_json::json!({ "ok": true, "message": "已停止" })
+        }
+        None => serde_json::json!({ "ok": true, "message": "本来就没在运行" }),
+    }
+}
+
+#[tauri::command]
+pub fn restart_bot(state: State<'_, AppState>) -> serde_json::Value {
+    if let Some(token) = state.bot.lock().ok().and_then(|mut b| b.take()) {
+        let _ = token.shutdown();
+    }
+    if let Ok(mut started) = state.bot_started_at.lock() {
+        *started = None;
+    }
+    std::thread::sleep(std::time::Duration::from_millis(800));
+    start_bot(state)
+}
+
+#[tauri::command]
+pub fn bot_status(state: State<'_, AppState>) -> serde_json::Value {
+    let running = state.bot.lock().map(|b| b.is_some()).unwrap_or(false);
+    let started_at = state.bot_started_at.lock().ok().and_then(|s| *s);
+    serde_json::json!({
+        "running": running,
+        "started_at": started_at,
+        "pid": if running { std::process::id() } else { 0 },
+    })
 }

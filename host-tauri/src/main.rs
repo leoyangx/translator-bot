@@ -2,6 +2,7 @@
 // 单实例 + 内嵌后端解包 + 系统 WebView2 窗口 + 托盘 + 自动更新（多线路）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bot;
 mod commands;
 mod config;
 mod db;
@@ -335,7 +336,11 @@ fn main() {
             commands::test_translate,
             commands::backend_port,
             commands::backend_call,
-            commands::front_log
+            commands::front_log,
+            commands::start_bot,
+            commands::stop_bot,
+            commands::restart_bot,
+            commands::bot_status
         ])
         .setup(|app| {
             let exe = exe_dir();
@@ -367,6 +372,8 @@ fn main() {
                 root: home.clone(),
                 cfg: std::sync::Mutex::new(cfg),
                 port: std::sync::Mutex::new(if port == 0 { None } else { Some(port) }),
+                bot: std::sync::Mutex::new(None),
+                bot_started_at: std::sync::Mutex::new(None),
             });
             app.manage(Backend(Mutex::new(Some(child))));
 

@@ -1,6 +1,6 @@
 [package]
 name = "translatorbot-app"
-version = "0.1.0-rc.8"
+version = "0.1.0-rc.9"
 edition = "2021"
 description = "Translation bot desktop shell"
 
@@ -25,6 +25,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 rusqlite = { version = "0.32", features = ["bundled"] }
 anyhow = "1"
 semver = "1"
+teloxide = { version = "0.13", default-features = false, features = ["rustls", "macros"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
 

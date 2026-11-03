@@ -32,7 +32,12 @@ function dbg(msg) {
   }
 }
 
+const RUST_CMDS = new Set(["start_bot", "stop_bot", "restart_bot", "bot_status"]);
+
 async function rpc(method, ...args) {
+  if (window.__TAURI__ && window.__TAURI__.core && RUST_CMDS.has(method)) {
+    return await window.__TAURI__.core.invoke(method);
+  }
   if (window.__TAURI__ && window.__TAURI__.core) {
     try {
       return await window.__TAURI__.core.invoke("backend_call", { method, args });
