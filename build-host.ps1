@@ -22,7 +22,8 @@ if (-not (Test-Path $tauri)) {
 }
 
 $backend = Join-Path $repo "dist\TranslatorBotBackend"
-if (-not (Test-Path $backend)) { throw "缺少 $backend，请先用 PyInstaller 打包后端" }
+# 后端已由 Rust 实现，Python 产物可选
+$hasBackend = Test-Path $backend
 
 # 纯英文构建目录
 Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
@@ -32,7 +33,7 @@ Copy-Item "$repo\assets" "$work\assets" -Recurse -Force
 New-Item -ItemType Directory -Force "$work\host-tauri\web" | Out-Null
 Copy-Item "$repo\app\console\web\*" "$work\host-tauri\web\" -Recurse -Force
 Copy-Item "$repo\assets" "$work\host-tauri\web\assets" -Recurse -Force
-Copy-Item $backend "$work\dist\TranslatorBotBackend" -Recurse -Force
+if ($hasBackend) { Copy-Item $backend "$work\dist\TranslatorBotBackend" -Recurse -Force }
 
 $env:CARGO_TARGET_DIR = "C:\Temp\tauri-target"
 $env:CARGO_PROFILE_DEV_PANIC = "abort"
