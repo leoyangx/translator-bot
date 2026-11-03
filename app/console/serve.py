@@ -48,13 +48,8 @@ def run() -> None:
     port_file.write_text(str(port), encoding="utf-8")
     atexit.register(lambda: api.bot.stop())
 
-    try:
-        cfg = api.load_config()
-        if cfg.app.autostart_bot and cfg.telegram.token and cfg.default_model:
-            api.bot.start()
-    except Exception:  # noqa: BLE001
-        log.exception("自动启动机器人失败")
-
+    # 机器人已由 Tauri 宿主（Rust/teloxide）托管，这里不再自动启动，
+    # 否则两边会抢同一个 Token 导致 409 Conflict。
     log.info("后端就绪：http://127.0.0.1:%s", port)
     try:
         while True:

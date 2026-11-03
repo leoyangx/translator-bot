@@ -368,9 +368,10 @@ fn main() {
                 .next()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(0);
+            let autostart = cfg.app.autostart_bot && !cfg.telegram.token.trim().is_empty();
             app.manage(commands::AppState {
                 root: home.clone(),
-                cfg: std::sync::Mutex::new(cfg),
+                cfg: std::sync::Mutex::new(cfg.clone()),
                 port: std::sync::Mutex::new(if port == 0 { None } else { Some(port) }),
                 bot: std::sync::Mutex::new(None),
                 bot_started_at: std::sync::Mutex::new(None),
@@ -378,6 +379,22 @@ fn main() {
             app.manage(Backend(Mutex::new(Some(child))));
 
             let icon = Image::from_bytes(ICON_PNG)?;
+            if autostart {
+                if let Some(token) = crate::bot::spawn(crate::bot::BotCtx {
+                    root: home.clone(),
+                    cfg: cfg.clone(),
+                }) {
+                    let state = app.state::<commands::AppState>();
+                    if let Ok(mut guard) = state.bot.lock() {
+                        *guard = Some(token);
+                    }
+                    if let Ok(mut started) = state.bot_started_at.lock() {
+                        *started = Some(crate::bot::started_at_now());
+                    }
+                    log_line(&home, "机器人已自动启动");
+                }
+            }
+
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title(TITLE)
                 .inner_size(1240.0, 880.0)
