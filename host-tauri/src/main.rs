@@ -32,7 +32,6 @@ use tauri::{
 use tauri_plugin_updater::UpdaterExt;
 
 const ICON_PNG: &[u8] = include_bytes!("../../assets/icon-512.png");
-const BACKEND_ZIP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/backend.zip"));
 const TITLE: &str = "翻译机器人";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GH_BASE: &str = "https://github.com/leoyangx/translator-bot/releases/latest/download/";
@@ -81,41 +80,6 @@ fn log_line(home: &Path, msg: &str) {
 }
 
 /// 首次运行（或版本变化）时把内嵌后端解包到数据目录
-fn ensure_payload(home: &Path) -> Result<PathBuf, String> {
-    let app_dir = home.join("app");
-    let backend = app_dir.join("backend").join("TranslatorBotBackend.exe");
-    let marker = app_dir.join("version.txt");
-    let fresh = fs::read_to_string(&marker)
-        .map(|v| v.trim() == VERSION)
-        .unwrap_or(false)
-        && backend.exists();
-    if fresh {
-        return Ok(backend);
-    }
-
-    log_line(home, &format!("解包后端 {}", VERSION));
-    let _ = fs::remove_dir_all(app_dir.join("backend"));
-    fs::create_dir_all(&app_dir).map_err(|e| format!("创建目录失败：{e}"))?;
-    let mut archive =
-        zip::ZipArchive::new(Cursor::new(BACKEND_ZIP)).map_err(|e| format!("后端包损坏：{e}"))?;
-    archive
-        .extract(&app_dir)
-        .map_err(|e| format!("解包失败：{e}"))?;
-    fs::write(&marker, VERSION).map_err(|e| format!("写入版本标记失败：{e}"))?;
-    Ok(backend)
-}
-
-fn kill_stale_backend() {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        let _ = Command::new("taskkill")
-            .args(["/F", "/IM", "TranslatorBotBackend.exe"])
-            .creation_flags(0x08000000)
-            .output();
-    }
-}
-
 fn start_backend(home: &Path, backend: &Path) -> Option<Child> {
     log_line(home, &format!("backend: {}", backend.display()));
     Command::new(backend)
@@ -359,7 +323,6 @@ fn main() {
             };
             log_line(&home, &format!("Tauri 宿主启动 v{}", VERSION));
 
-            kill_stale_backend();
             let cfg = crate::config::load_config(&home).unwrap_or_default();
             let autostart = cfg.app.autostart_bot && !cfg.telegram.token.trim().is_empty();
             app.manage(commands::AppState {
