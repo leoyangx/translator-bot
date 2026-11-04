@@ -34,6 +34,9 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build-host.ps1 -Msvc
 
       - name: Assemble release files
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
