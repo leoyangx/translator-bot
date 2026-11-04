@@ -411,6 +411,14 @@ async fn handle_callback(bot: Bot, q: CallbackQuery, ctx: Arc<BotCtx>) -> Respon
     let _ = bot.answer_callback_query(q.id.clone()).await;
 
     if let Some(tone) = data.strip_prefix("tone:") {
+        // 保存为默认语气，后续消息都用它
+        let mut cfg2 = cfg.clone();
+        cfg2.features.default_tone = tone.to_string();
+        if let Ok(mut guard) = ctx.cfg.lock() {
+            *guard = cfg2.clone();
+        }
+        let _ = save_config(&ctx.root, &cfg2);
+
         if let Some(message) = q.message.clone() {
             let chat_id = message.chat().id;
             let last = ctx

@@ -357,8 +357,19 @@ fn main() {
                 .min_inner_size(1020.0, 680.0)
                 .background_color(tauri::window::Color(11, 15, 26, 255))
                 .data_directory(home.join("data").join("webview2"))
+                .visible(false)
                 .icon(icon.clone())?
                 .build()?;
+
+            // 页面加载完成后再显示，避免启动白屏闪烁
+            {
+                let show_win = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(450));
+                    let _ = show_win.show();
+                    let _ = show_win.set_focus();
+                });
+            }
 
             let w = window.clone();
             window.on_window_event(move |event| {

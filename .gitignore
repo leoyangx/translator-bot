@@ -19,12 +19,6 @@ build/
 host-tauri/target/
 host-tauri/gen/
 
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-
 # 临时文件
 .tmp/
 *.log
