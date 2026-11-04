@@ -360,8 +360,18 @@ fn main() {
                 .visible(false)
                 .on_page_load(|window, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                        static SHOWN: std::sync::atomic::AtomicBool =
+                            std::sync::atomic::AtomicBool::new(false);
+                        if SHOWN.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                            return;
+                        }
+                        // 等浏览器把首帧真正画出来，再显示窗口
+                        let w = window.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(180));
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        });
                     }
                 })
                 .icon(icon.clone())?
