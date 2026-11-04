@@ -357,23 +357,6 @@ fn main() {
                 .min_inner_size(1020.0, 680.0)
                 .background_color(tauri::window::Color(11, 15, 26, 255))
                 .data_directory(home.join("data").join("webview2"))
-                .visible(false)
-                .on_page_load(|window, payload| {
-                    if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                        static SHOWN: std::sync::atomic::AtomicBool =
-                            std::sync::atomic::AtomicBool::new(false);
-                        if SHOWN.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                            return;
-                        }
-                        // 等浏览器把首帧真正画出来，再显示窗口
-                        let w = window.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_millis(180));
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        });
-                    }
-                })
                 .icon(icon.clone())?
                 .build()?;
 
