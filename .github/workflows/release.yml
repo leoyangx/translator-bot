@@ -37,13 +37,17 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          $setup = Get-ChildItem "dist\*_x64-setup.exe" | Select-Object -First 1
-          if (-not $setup) { throw "没有找到 NSIS 安装包" }
+          $setup = Get-ChildItem "dist\*_x64-setup.exe" | Where-Object { $_.Name -like "*_$version`_x64-setup.exe" } | Select-Object -First 1
+          if (-not $setup) { throw "没有找到本版本（$version）的 NSIS 安装包" }
           $sig = "$($setup.FullName).sig"
           if (-not (Test-Path $sig)) { throw "没有找到签名文件" }
+          $sigText = (Get-Content $sig -Raw).Trim()
+          if ($sigText -notmatch [regex]::Escape($version)) {
+            throw "签名文件与版本不匹配：期望 $version，实际签名内容不含该版本号"
+          }
 
           Copy-Item $setup.FullName "dist\TranslatorBot-Setup-$version.exe" -Force
-          $signature = (Get-Content $sig -Raw).Trim()
+          $signature = $sigText
 
           # 便携版：单文件 exe
           Copy-Item "dist\TranslatorBot\TranslatorBot.exe" "dist\TranslatorBot-portable.exe" -Force
