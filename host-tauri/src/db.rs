@@ -171,3 +171,29 @@ fn time_from_unix(secs: u64) -> (i64, u32, u32) {
     }
     (year, (month + 1) as u32, (remaining + 1) as u32)
 }
+
+impl Db {
+    /// 今日翻译次数：取 usage 表与今日缓存条目的较大值
+    pub fn translations_today(&self) -> i64 {
+        let usage = self.usage_today();
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return usage,
+        };
+        let start = {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() + 8 * 3600)
+                .unwrap_or(0);
+            (now / 86400) * 86400 - 8 * 3600
+        };
+        let cached: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM cache WHERE created_at >= ?1",
+                rusqlite::params![start as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        usage.max(cached)
+    }
+}

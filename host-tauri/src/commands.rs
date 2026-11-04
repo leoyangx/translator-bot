@@ -85,15 +85,25 @@ pub async fn test_model(
     model: String,
     proxy: String,
 ) -> Value {
-    if base_url.trim().is_empty() || api_key.trim().is_empty() || model.trim().is_empty() {
-        return err("接口地址、API Key、模型名都要填");
+    if base_url.trim().is_empty() {
+        return err("还没填接口地址");
     }
+    if api_key.trim().is_empty() {
+        return err("还没填 API Key");
+    }
+    let mut model = model.trim().to_string();
     let provider = match Provider::new(&base_url, &api_key, &proxy, 20) {
         Ok(p) => p,
         Err(exc) => return err(format!("初始化失败：{exc}")),
     };
     let started = std::time::Instant::now();
     let models = provider.models().await.unwrap_or_default();
+    if model.is_empty() {
+        match models.first() {
+            Some(first) => model = first.clone(),
+            None => return err("模型列表是空的，请点「拉取模型并测试」先拉取"),
+        }
+    }
     match provider
         .chat(
             &[crate::prompts::Message {

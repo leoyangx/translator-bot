@@ -32,6 +32,46 @@ pub struct BotCtx {
     pub last_text: Mutex<HashMap<i64, String>>,
 }
 
+fn log_call(root: &std::path::Path, chat_id: i64, src: &str, tgt: &str, chars: usize) {
+    let path = root.join("logs").join("host.log");
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let stamp = chrono_like_now();
+        let _ = writeln!(
+            f,
+            "{stamp} [call] chat={chat_id} {src}->{tgt} {chars} 字"
+        );
+    }
+}
+
+fn chrono_like_now() -> String {
+    let secs = now() + 8 * 3600;
+    let h = (secs % 86400) / 3600;
+    let m = (secs % 3600) / 60;
+    let s = secs % 60;
+    let days = secs / 86400;
+    let mut year = 1970i64;
+    let mut rem = days as i64;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let yd = if leap { 366 } else { 365 };
+        if rem < yd { break; }
+        rem -= yd;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let months = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut mo = 0usize;
+    for (i, mm) in months.iter().enumerate() {
+        if rem < *mm as i64 { mo = i; break; }
+        rem -= *mm as i64;
+    }
+    format!("{year}-{:02}-{:02} {h:02}:{m:02}:{s:02}", mo + 1, rem + 1)
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -220,6 +260,7 @@ async fn do_translate(
     match translator.translate(text, &src, &tgt, tone).await {
         Ok((output, _cached)) => {
             db.bump_usage();
+            log_call(&ctx.root, 0, &src, &tgt, text.chars().count());
             Ok(Some((src, tgt, output)))
         }
         Err(e) => Err(e.to_string()),
