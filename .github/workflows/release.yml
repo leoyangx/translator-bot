@@ -40,6 +40,9 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
+          $confVersion = (Get-Content "host-tauri\tauri.conf.json" -Raw | ConvertFrom-Json).version
+          if ($confVersion -ne $version) { throw "tauri.conf 版本与标签不一致：$confVersion / $version" }
+
           $setups = Get-ChildItem "dist\*x64-setup.exe" -ErrorAction SilentlyContinue
           $setup = $setups | Where-Object { $_.Name -like "*$version*" } | Select-Object -First 1
           if (-not $setup) {
@@ -56,6 +59,7 @@ jobs:
           # 用 CI 私钥对最终要上传的文件重新签名，确保签名与文件、版本三者一致
           $keyPath = Join-Path $env:RUNNER_TEMP "updater.key"
           Set-Content -Path $keyPath -Value $env:TAURI_SIGNING_PRIVATE_KEY -NoNewline
+          Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
           cargo tauri signer sign --private-key-path $keyPath --password $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD "dist\TranslatorBot-Setup-$version.exe"
           if ($LASTEXITCODE -ne 0) { throw "重新签名失败" }
           $signature = (Get-Content "dist\TranslatorBot-Setup-$version.exe.sig" -Raw).Trim()
