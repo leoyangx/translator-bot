@@ -48,7 +48,7 @@ jobs:
           # 用 CI 私钥对最终要上传的文件重新签名，确保签名与文件、版本三者一致
           $keyPath = Join-Path $env:RUNNER_TEMP "updater.key"
           Set-Content -Path $keyPath -Value $env:TAURI_SIGNING_PRIVATE_KEY -NoNewline
-          cargo tauri signer sign -f $keyPath -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD "dist\TranslatorBot-Setup-$version.exe"
+          cargo tauri signer sign --private-key-path $keyPath --password $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD "dist\TranslatorBot-Setup-$version.exe"
           if ($LASTEXITCODE -ne 0) { throw "重新签名失败" }
           $signature = (Get-Content "dist\TranslatorBot-Setup-$version.exe.sig" -Raw).Trim()
           $sigText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($signature))
