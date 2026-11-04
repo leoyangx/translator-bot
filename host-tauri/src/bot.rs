@@ -202,14 +202,11 @@ fn glossary_text(ctx: &BotCtx) -> String {
 
 fn stats_text(ctx: &BotCtx) -> String {
     let (calls, cache, glossary) = match Db::open(&ctx.root.join("data").join("bot.db")) {
-        Ok(d) => (d.usage_today(), d.cache_count(), d.glossary().len()),
+        Ok(d) => (d.translations_today(), d.cache_count(), d.glossary().len()),
         Err(_) => (0, 0, 0),
     };
-    let db_path = ctx.root.join("data").join("bot.db");
-    let total_cache = Db::open(&db_path).map(|d| d.cache_count()).unwrap_or(-1);
     format!(
-        "<b>📊 今日用量</b>\n\n翻译次数：{calls}\n缓存条目：{cache}\n术语条目：{glossary}\n\n缓存总数：{total_cache}\n数据库：<code>{}</code>",
-        db_path.to_string_lossy()
+        "<b>📊 今日用量</b>\n\n翻译次数：{calls}\n缓存条目：{cache}\n术语条目：{glossary}\n\n<i>缓存条目越多，重复内容响应越快。</i>"
     )
 }
 
