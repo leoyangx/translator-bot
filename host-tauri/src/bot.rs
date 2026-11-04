@@ -15,6 +15,7 @@ use crate::provider::Provider;
 use crate::translator::Translator;
 
 pub const CONTACT_URL: &str = "https://t.me/lucky_morrow";
+const WELCOME_IMG: &[u8] = include_bytes!("../../assets/welcome.png");
 
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "可用命令")]
@@ -204,8 +205,11 @@ fn stats_text(ctx: &BotCtx) -> String {
         Ok(d) => (d.usage_today(), d.cache_count(), d.glossary().len()),
         Err(_) => (0, 0, 0),
     };
+    let db_path = ctx.root.join("data").join("bot.db");
+    let total_cache = Db::open(&db_path).map(|d| d.cache_count()).unwrap_or(-1);
     format!(
-        "<b>📊 今日用量</b>\n\n翻译次数：{calls}\n缓存条目：{cache}\n术语条目：{glossary}\n\n缓存条目越多，重复内容响应越快。"
+        "<b>📊 今日用量</b>\n\n翻译次数：{calls}\n缓存条目：{cache}\n术语条目：{glossary}\n\n缓存总数：{total_cache}\n数据库：<code>{}</code>",
+        db_path.to_string_lossy()
     )
 }
 
@@ -270,10 +274,19 @@ async fn do_translate(
 async fn handle_command(bot: Bot, msg: Message, cmd: Cmd, ctx: Arc<BotCtx>) -> ResponseResult<()> {
     let cfg = ctx.cfg.lock().map(|c| c.clone()).unwrap_or_default();
     let _ = cmd;
-    bot.send_message(msg.chat.id, intro_text(&cfg))
-        .parse_mode(ParseMode::Html)
-        .reply_markup(main_menu())
-        .await?;
+    let mut caption = intro_text(&cfg);
+    if caption.chars().count() > 1000 {
+        caption = caption.chars().take(995).collect::<String>();
+        caption.push('…');
+    }
+    bot.send_photo(
+        msg.chat.id,
+        teloxide::types::InputFile::memory(WELCOME_IMG.to_vec()),
+    )
+    .caption(caption)
+    .parse_mode(ParseMode::Html)
+    .reply_markup(main_keyboard())
+    .await?;
     let _ = ctx;
     Ok(())
 }

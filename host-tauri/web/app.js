@@ -325,6 +325,7 @@ function renderPrompts() {
 }
 
 function closeModal() {
+  if (typeof downloading !== "undefined" && downloading) return;
   const root = $("#modal-root");
   if (root) root.classList.remove("show");
 }
@@ -587,6 +588,7 @@ function bindStatic() {
   if (window.__TAURI__ && window.__TAURI__.event) {
     window.__TAURI__.event.listen("update-progress", (e) => {
       const d = (e && e.payload) || {};
+      if (window.__updTick) window.__updTick();
       const text = $("#upd-text");
       const fill = $("#upd-bar-fill");
       if (!text) return;
