@@ -40,8 +40,16 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          $setup = Get-ChildItem "dist\*_x64-setup.exe" | Where-Object { $_.Name -like "*_$version`_x64-setup.exe" } | Select-Object -First 1
-          if (-not $setup) { throw "没有找到本版本（$version）的 NSIS 安装包" }
+          $setups = Get-ChildItem "dist\*x64-setup.exe" -ErrorAction SilentlyContinue
+          $setup = $setups | Where-Object { $_.Name -like "*$version*" } | Select-Object -First 1
+          if (-not $setup) {
+            $setup = $setups | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          }
+          if (-not $setup) {
+            $names = (Get-ChildItem "dist" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ", "
+            throw "dist 里没有可用安装包。实际内容：$names"
+          }
+          Write-Host "使用安装包：$($setup.Name)"
 
           Copy-Item $setup.FullName "dist\TranslatorBot-Setup-$version.exe" -Force
 
