@@ -1,35 +1,42 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>翻译</title>
-  <style>html,body{background:#0f1115;margin:0}</style>
+  <style>html,body{background:#ffffff;margin:0}html[data-theme="dark"],html[data-theme="dark"] body{background:#0f1115}</style>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <img src="assets/icon-512.png" alt="" class="logo">
-      <span>翻译</span>
+      <span class="brand-name">翻译</span>
     </div>
+
     <div class="lang-bar">
-      <select id="src-lang" class="lang-select" title="源语言">
-        <option value="auto">自动检测</option>
-      </select>
-      <button id="btn-swap" class="icon-btn" title="互换语言">⇄</button>
-      <select id="tgt-lang" class="lang-select" title="目标语言"></select>
+      <button id="btn-src" class="lang-btn">
+        <span id="src-label">自动检测</span>
+        <span class="caret">▾</span>
+      </button>
+      <button id="btn-swap" class="swap-btn" title="互换语言">⇄</button>
+      <button id="btn-tgt" class="lang-btn">
+        <span id="tgt-label">英语</span>
+        <span class="caret">▾</span>
+      </button>
     </div>
+
     <div class="actions">
-      <button id="btn-glossary" class="ghost-btn" title="术语表">📖 术语表</button>
-      <button id="btn-history" class="ghost-btn" title="历史">🕘 历史</button>
-      <button id="btn-settings" class="ghost-btn" title="设置">⚙ 设置</button>
+      <button id="btn-glossary" class="ghost-btn">📖 术语表</button>
+      <button id="btn-history" class="ghost-btn">🕘 历史</button>
+      <button id="btn-theme" class="icon-btn" title="切换主题">🌙</button>
+      <button id="btn-settings" class="icon-btn" title="设置">⚙</button>
     </div>
   </header>
 
   <main class="workspace">
     <section class="pane pane-input">
-      <textarea id="input" placeholder="把要说的话写在这里…" spellcheck="false"></textarea>
+      <textarea id="input" placeholder="输入或粘贴文本进行翻译" spellcheck="false"></textarea>
       <div class="pane-foot">
         <span id="char-count" class="meta">0 / 6000 字</span>
         <div class="foot-actions">
@@ -46,36 +53,39 @@
         <div id="output-error" class="error hidden"></div>
       </div>
       <div class="pane-foot">
-        <div class="tone-group" id="tone-group">
-          <button data-tone="natural" class="tone active">自然</button>
-          <button data-tone="formal" class="tone">正式</button>
-          <button data-tone="casual" class="tone">口语</button>
-          <button data-tone="literal" class="tone">直译</button>
-        </div>
+        <span id="meta" class="meta"></span>
         <div class="foot-actions">
-          <span id="meta" class="meta"></span>
           <button id="btn-copy" class="ghost-btn">复制</button>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- 抽屉：术语表 -->
+  <!-- 语言选择面板 -->
+  <div class="lang-panel" id="lang-panel" hidden>
+    <div class="lang-panel-head">
+      <input id="lang-search" placeholder="搜索语言" autocomplete="off">
+      <button class="icon-btn" data-lang-close>✕</button>
+    </div>
+    <div class="lang-list" id="lang-list"></div>
+  </div>
+
+  <!-- 术语表 -->
   <div class="drawer" id="drawer-glossary" hidden>
     <div class="drawer-head">
       <h2>术语表</h2>
       <button class="icon-btn" data-close>✕</button>
     </div>
-    <p class="hint">固定专有名词的译法，翻译时优先使用。</p>
+    <p class="hint">固定专有名词的译法，翻译时优先生效。</p>
     <div class="glossary-add">
       <input id="glossary-source" placeholder="原文，例如 BIN">
       <input id="glossary-target" placeholder="译文，例如 BIN 码">
       <button id="btn-glossary-add" class="primary-btn">添加</button>
     </div>
-    <div id="glossary-list" class="glossary-list"></div>
+    <div id="glossary-list" class="list"></div>
   </div>
 
-  <!-- 抽屉：历史 -->
+  <!-- 历史 -->
   <div class="drawer" id="drawer-history" hidden>
     <div class="drawer-head">
       <h2>历史记录</h2>
@@ -84,10 +94,10 @@
         <button class="icon-btn" data-close>✕</button>
       </div>
     </div>
-    <div id="history-list" class="history-list"></div>
+    <div id="history-list" class="list"></div>
   </div>
 
-  <!-- 抽屉：设置 -->
+  <!-- 设置 -->
   <div class="drawer" id="drawer-settings" hidden>
     <div class="drawer-head">
       <h2>设置</h2>
@@ -95,17 +105,13 @@
     </div>
 
     <h3>模型</h3>
-    <label class="field">服务商地址
-      <input id="f-base" placeholder="https://api.deepseek.com/v1">
-    </label>
-    <label class="field">API Key
-      <input id="f-key" type="password" placeholder="sk-...">
-    </label>
-    <label class="field">模型名
-      <input id="f-model" placeholder="deepseek-chat">
-    </label>
-    <button id="btn-test-model" class="ghost-btn">测试连接</button>
-    <span id="test-result" class="meta"></span>
+    <label class="field">服务商地址<input id="f-base" placeholder="https://api.deepseek.com/v1"></label>
+    <label class="field">API Key<input id="f-key" type="password" placeholder="sk-..."></label>
+    <label class="field">模型名<input id="f-model" placeholder="deepseek-chat"></label>
+    <div class="row">
+      <button id="btn-test-model" class="ghost-btn">测试连接</button>
+      <span id="test-result" class="meta"></span>
+    </div>
 
     <h3>翻译</h3>
     <label class="field">默认语气
@@ -116,9 +122,7 @@
         <option value="literal">直译</option>
       </select>
     </label>
-    <label class="field">代理（可选）
-      <input id="f-proxy" placeholder="http://127.0.0.1:7890">
-    </label>
+    <label class="field">代理（可选）<input id="f-proxy" placeholder="http://127.0.0.1:7890"></label>
 
     <h3>关于</h3>
     <div class="meta" id="version-label"></div>
