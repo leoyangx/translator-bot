@@ -15,8 +15,6 @@ pub struct AppState {
     pub root: std::path::PathBuf,
     pub cfg: Mutex<Config>,
     pub port: Mutex<Option<u16>>,
-    pub bot: Mutex<Option<teloxide::dispatching::ShutdownToken>>,
-    pub bot_started_at: Mutex<Option<u64>>,
 }
 
 fn err(message: impl Into<String>) -> Value {
@@ -221,75 +219,9 @@ pub fn front_log(state: State<'_, AppState>, message: String) {
     }
 }
 
-#[tauri::command]
-pub fn start_bot(state: State<'_, AppState>) -> serde_json::Value {
-    if state.bot.lock().map(|b| b.is_some()).unwrap_or(false) {
-        return serde_json::json!({ "ok": true, "message": "已经在运行" });
-    }
-    // 以磁盘上的配置为准：界面保存后由后端写盘，内存快照可能是旧的
-    let cfg = crate::config::load_config(&state.root).unwrap_or_default();
-    if let Ok(mut guard) = state.cfg.lock() {
-        *guard = cfg.clone();
-    }
-    if cfg.telegram.token.trim().is_empty() {
-        return serde_json::json!({ "ok": false, "message": "还没填 Telegram Bot Token" });
-    }
-    let ctx = crate::bot::BotCtx {
-        root: state.root.clone(),
-        cfg: std::sync::Mutex::new(cfg),
-        last_text: std::sync::Mutex::new(std::collections::HashMap::new()),
-    };
-    match crate::bot::spawn(ctx) {
-        Some(token) => {
-            if let Ok(mut guard) = state.bot.lock() {
-                *guard = Some(token);
-            }
-            if let Ok(mut started) = state.bot_started_at.lock() {
-                *started = Some(crate::bot::started_at_now());
-            }
-            serde_json::json!({ "ok": true, "message": "已启动" })
-        }
-        None => serde_json::json!({ "ok": false, "message": "启动失败：Token 无效" }),
-    }
-}
 
-#[tauri::command]
-pub fn stop_bot(state: State<'_, AppState>) -> serde_json::Value {
-    let token = state.bot.lock().ok().and_then(|mut b| b.take());
-    match token {
-        Some(t) => {
-            let _ = t.shutdown();
-            if let Ok(mut started) = state.bot_started_at.lock() {
-                *started = None;
-            }
-            serde_json::json!({ "ok": true, "message": "已停止" })
-        }
-        None => serde_json::json!({ "ok": true, "message": "本来就没在运行" }),
-    }
-}
 
-#[tauri::command]
-pub fn restart_bot(state: State<'_, AppState>) -> serde_json::Value {
-    if let Some(token) = state.bot.lock().ok().and_then(|mut b| b.take()) {
-        let _ = token.shutdown();
-    }
-    if let Ok(mut started) = state.bot_started_at.lock() {
-        *started = None;
-    }
-    std::thread::sleep(std::time::Duration::from_millis(800));
-    start_bot(state)
-}
 
-#[tauri::command]
-pub fn bot_status(state: State<'_, AppState>) -> serde_json::Value {
-    let running = state.bot.lock().map(|b| b.is_some()).unwrap_or(false);
-    let started_at = state.bot_started_at.lock().ok().and_then(|s| *s);
-    serde_json::json!({
-        "running": running,
-        "started_at": started_at,
-        "pid": if running { std::process::id() } else { 0 },
-    })
-}
 
 fn now_day() -> String {
     let secs = std::time::SystemTime::now()
@@ -458,10 +390,31 @@ pub async fn ui_call(
         "export_diagnostics" => export_diagnostics(state),
         "get_autostart" => get_autostart(),
         "set_autostart" => set_autostart(arg0.as_bool().unwrap_or(false)),
-        "start_bot" => start_bot(state),
-        "stop_bot" => stop_bot(state),
-        "restart_bot" => restart_bot(state),
-        "bot_status" => bot_status(state),
+        "start_bot" | "stop_bot" | "restart_bot" => json!({ "ok": false, "message": "该功能已在重构中移除" }),
+        "translate" => {
+            let text = arg0["text"].as_str().unwrap_or("").to_string();
+            let src = arg0["src"].as_str().unwrap_or("auto").to_string();
+            let tgt = arg0["tgt"].as_str().unwrap_or("auto").to_string();
+            let tone = arg0["tone"].as_str().unwrap_or("natural").to_string();
+            translate_text(state, text, src, tgt, tone).await?
+        }
+        "languages" => languages_list(),
+        "glossary_list" => glossary_list(state),
+        "glossary_save" => {
+            let source = arg0["source"].as_str().unwrap_or("").to_string();
+            let target = arg0["target"].as_str().unwrap_or("").to_string();
+            glossary_save(state, source, target)
+        }
+        "glossary_remove" => {
+            let source = arg0["source"].as_str().unwrap_or("").to_string();
+            glossary_remove(state, source)
+        }
+        "history_list" => {
+            let limit = arg0.as_u64().unwrap_or(100) as usize;
+            history_list(state, limit)
+        }
+        "history_clear" => history_clear(state),
+        "bot_status" => json!({ "running": false, "started_at": null, "pid": 0 }),
         "quit_app" => {
             app.exit(0);
             json!({ "ok": true })
@@ -469,4 +422,126 @@ pub async fn ui_call(
         other => return Err(format!("未支持的方法：{other}")),
     };
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn translate_text(
+    state: State<'_, AppState>,
+    text: String,
+    src: String,
+    tgt: String,
+    tone: String,
+) -> Result<Value, String> {
+    let cfg = crate::config::load_config(&state.root).unwrap_or_default();
+    if text.trim().is_empty() {
+        return Ok(json!({ "ok": false, "message": "输入为空" }));
+    }
+    let model = cfg
+        .default_model()
+        .cloned()
+        .ok_or_else(|| "还没有可用模型，请在设置里填写 API Key".to_string())?;
+    let provider = crate::provider::Provider::new(&model.base_url, &model.api_key, &cfg.proxy, 60)
+        .map_err(|e| format!("模型初始化失败：{e}"))?;
+    let db = Db::open(&state.root.join("data").join("bot.db")).map_err(|e| e.to_string())?;
+
+    let (src_code, tgt_code) = if src == "auto" {
+        let (s2, t2) = resolve_direction(&text, &cfg.languages.mine, &cfg.languages.partners);
+        let tgt_final = if tgt == "auto" { t2 } else { tgt.clone() };
+        (s2, tgt_final)
+    } else {
+        (src.clone(), if tgt == "auto" { cfg.languages.mine.clone() } else { tgt.clone() })
+    };
+
+    let translator = Translator {
+        provider: &provider,
+        db: &db,
+        cfg: &cfg,
+        model: model.model.clone(),
+    };
+    let started = std::time::Instant::now();
+    match translator.translate(&text, &src_code, &tgt_code, &tone).await {
+        Ok((output, cached)) => {
+            db.bump_usage();
+            db.add_history(&src_code, &tgt_code, &tone, &text, &output, cached);
+            Ok(json!({
+                "ok": true,
+                "translation": output,
+                "src": src_code,
+                "tgt": tgt_code,
+                "src_name": language_name(&src_code),
+                "tgt_name": language_name(&tgt_code),
+                "elapsed_ms": started.elapsed().as_millis() as u64,
+                "cached": cached,
+            }))
+        }
+        Err(e) => Ok(json!({ "ok": false, "message": e.to_string() })),
+    }
+}
+
+#[tauri::command]
+pub fn languages_list() -> Value {
+    let items: Vec<Value> = crate::languages::LANGUAGES
+        .iter()
+        .map(|l| json!({ "code": l.code, "name": l.zh }))
+        .collect();
+    json!(items)
+}
+
+#[tauri::command]
+pub fn glossary_list(state: State<'_, AppState>) -> Value {
+    let items = Db::open(&state.root.join("data").join("bot.db"))
+        .map(|d| d.glossary())
+        .unwrap_or_default();
+    let rows: Vec<Value> = items
+        .into_iter()
+        .map(|(s, t)| json!({ "source": s, "target": t }))
+        .collect();
+    json!(rows)
+}
+
+#[tauri::command]
+pub fn glossary_save(state: State<'_, AppState>, source: String, target: String) -> Value {
+    let (s, t) = (source.trim().to_string(), target.trim().to_string());
+    if s.is_empty() || t.is_empty() {
+        return json!({ "ok": false, "message": "原文和译文都不能为空" });
+    }
+    if let Ok(db) = Db::open(&state.root.join("data").join("bot.db")) {
+        db.glossary_put(&s, &t);
+        return json!({ "ok": true });
+    }
+    json!({ "ok": false, "message": "数据库打开失败" })
+}
+
+#[tauri::command]
+pub fn glossary_remove(state: State<'_, AppState>, source: String) -> Value {
+    if let Ok(db) = Db::open(&state.root.join("data").join("bot.db")) {
+        db.glossary_remove(&source);
+        return json!({ "ok": true });
+    }
+    json!({ "ok": false, "message": "数据库打开失败" })
+}
+
+#[tauri::command]
+pub fn history_list(state: State<'_, AppState>, limit: usize) -> Value {
+    let rows = Db::open(&state.root.join("data").join("bot.db"))
+        .map(|d| d.history(limit.clamp(1, 500)))
+        .unwrap_or_default();
+    let items: Vec<Value> = rows
+        .into_iter()
+        .map(|(ts, src, tgt, tone, source, output, cached)| {
+            json!({
+                "ts": ts, "src": src, "tgt": tgt, "tone": tone,
+                "source": source, "output": output, "cached": cached
+            })
+        })
+        .collect();
+    json!(items)
+}
+
+#[tauri::command]
+pub fn history_clear(state: State<'_, AppState>) -> Value {
+    if let Ok(db) = Db::open(&state.root.join("data").join("bot.db")) {
+        db.clear_history();
+    }
+    json!({ "ok": true })
 }

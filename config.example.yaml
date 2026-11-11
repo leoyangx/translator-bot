@@ -5,10 +5,6 @@
 
 version: 0.0.1
 
-telegram:
-  token: "123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  admin_ids: []
-
 models:
   - id: deepseek-pro
     name: DeepSeek V4 Pro

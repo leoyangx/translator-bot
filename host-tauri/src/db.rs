@@ -26,6 +26,16 @@ impl Db {
                source TEXT PRIMARY KEY,
                target TEXT NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS history (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               created_at INTEGER NOT NULL,
+               src TEXT NOT NULL,
+               tgt TEXT NOT NULL,
+               tone TEXT NOT NULL,
+               source TEXT NOT NULL,
+               output TEXT NOT NULL,
+               cached INTEGER NOT NULL DEFAULT 0
+             );
              CREATE TABLE IF NOT EXISTS usage (
                day TEXT PRIMARY KEY,
                count INTEGER NOT NULL DEFAULT 0
@@ -195,5 +205,62 @@ impl Db {
             )
             .unwrap_or(0);
         usage.max(cached)
+    }
+}
+
+impl Db {
+    pub fn add_history(&self, src: &str, tgt: &str, tone: &str, source: &str, output: &str, cached: bool) {
+        if let Ok(conn) = self.conn.lock() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let _ = conn.execute(
+                "INSERT INTO history (created_at, src, tgt, tone, source, output, cached) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                rusqlite::params![now as i64, src, tgt, tone, source, output, cached as i64],
+            );
+        }
+    }
+
+    pub fn history(&self, limit: usize) -> Vec<(i64, String, String, String, String, String, bool)> {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
+        let mut stmt = match conn.prepare(
+            "SELECT created_at, src, tgt, tone, source, output, cached FROM history ORDER BY id DESC LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = stmt.query_map(rusqlite::params![limit as i64], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, i64>(6)? != 0,
+            ))
+        });
+        match rows {
+            Ok(iter) => iter.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    pub fn clear_history(&self) {
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute("DELETE FROM history", []);
+        }
+    }
+}
+
+impl Db {
+    pub fn glossary_remove(&self, source: &str) {
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute("DELETE FROM glossary WHERE source = ?1", rusqlite::params![source]);
+        }
     }
 }

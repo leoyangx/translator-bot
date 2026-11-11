@@ -2,7 +2,6 @@
 // 单实例 + 内嵌后端解包 + 系统 WebView2 窗口 + 托盘 + 自动更新（多线路）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod bot;
 mod commands;
 mod config;
 mod db;
@@ -32,7 +31,7 @@ use tauri::{
 use tauri_plugin_updater::UpdaterExt;
 
 const ICON_PNG: &[u8] = include_bytes!("../../assets/icon-512.png");
-const TITLE: &str = "翻译机器人";
+const TITLE: &str = "翻译";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GH_BASE: &str = "https://github.com/leoyangx/translator-bot/releases/latest/download/";
 const MIRRORS: [&str; 2] = [
@@ -301,10 +300,6 @@ fn main() {
             commands::backend_port,
             commands::backend_call,
             commands::front_log,
-            commands::start_bot,
-            commands::stop_bot,
-            commands::restart_bot,
-            commands::bot_status,
             commands::get_stats,
             commands::read_logs,
             commands::test_token,
@@ -312,49 +307,33 @@ fn main() {
             commands::export_diagnostics,
             commands::get_autostart,
             commands::set_autostart,
-            commands::ui_call
+            commands::ui_call,
+            commands::translate_text,
+            commands::languages_list,
+            commands::glossary_list,
+            commands::glossary_save,
+            commands::glossary_remove,
+            commands::history_list,
+            commands::history_clear
         ])
         .setup(|app| {
-            let exe = exe_dir();
-            let home = if exe.join("backend").join("TranslatorBotBackend.exe").exists() {
-                exe.clone()
-            } else {
-                data_home()
-            };
+            let home = data_home();
             log_line(&home, &format!("Tauri 宿主启动 v{}", VERSION));
 
             let cfg = crate::config::load_config(&home).unwrap_or_default();
-            let autostart = cfg.app.autostart_bot && !cfg.telegram.token.trim().is_empty();
             app.manage(commands::AppState {
                 root: home.clone(),
                 cfg: std::sync::Mutex::new(cfg.clone()),
                 port: std::sync::Mutex::new(None),
-                bot: std::sync::Mutex::new(None),
-                bot_started_at: std::sync::Mutex::new(None),
             });
-            if autostart {
-                if let Some(token) = crate::bot::spawn(crate::bot::BotCtx {
-                    root: home.clone(),
-                    cfg: std::sync::Mutex::new(cfg.clone()),
-                    last_text: std::sync::Mutex::new(std::collections::HashMap::new()),
-                }) {
-                    let state = app.state::<commands::AppState>();
-                    if let Ok(mut guard) = state.bot.lock() {
-                        *guard = Some(token);
-                    }
-                    if let Ok(mut started) = state.bot_started_at.lock() {
-                        *started = Some(crate::bot::started_at_now());
-                    }
-                    log_line(&home, "机器人已自动启动");
-                }
-            }
+
 
             let icon = Image::from_bytes(ICON_PNG).map_err(|e| format!("图标加载失败: {e}"))?;
 
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title(TITLE)
-                .inner_size(1240.0, 880.0)
-                .min_inner_size(1020.0, 680.0)
+                .inner_size(1080.0, 720.0)
+                .min_inner_size(880.0, 560.0)
                 .background_color(tauri::window::Color(11, 15, 26, 255))
                 .data_directory(home.join("data").join("webview2"))
                 .icon(icon.clone())?
@@ -368,7 +347,7 @@ fn main() {
                 }
             });
 
-            let show = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "打开翻译窗口", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
             let menu = Menu::with_items(app, &[&show, &sep, &quit])?;
