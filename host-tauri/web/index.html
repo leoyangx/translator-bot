@@ -52,8 +52,8 @@
           <div class="pane-foot">
             <span id="char-count" class="meta">0 / 6000 字</span>
             <div class="foot-actions">
+              <span class="meta" id="auto-hint">自动翻译已开启 · Ctrl+Enter 立即翻译</span>
               <button id="btn-clear" class="ghost-btn">清空</button>
-              <button id="btn-translate" class="primary-btn">翻译 <span class="kbd">Ctrl+↵</span></button>
             </div>
           </div>
         </section>
@@ -127,6 +127,10 @@
     </div>
 
     <h3>翻译</h3>
+    <div class="switch-row">
+      <div><div class="name">自动翻译</div><div class="desc">停止输入约 0.8 秒或打标点后自动翻译</div></div>
+      <label class="switch"><input type="checkbox" id="f-auto"><span></span></label>
+    </div>
     <label class="field">默认语气
       <select id="f-tone">
         <option value="natural">自然</option>

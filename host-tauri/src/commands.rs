@@ -15,6 +15,8 @@ pub struct AppState {
     pub root: std::path::PathBuf,
     pub cfg: Mutex<Config>,
     pub port: Mutex<Option<u16>>,
+    /// 流式请求序号：新请求会作废旧请求的输出
+    pub stream_seq: std::sync::atomic::AtomicU64,
 }
 
 fn err(message: impl Into<String>) -> Value {
@@ -517,4 +519,89 @@ pub fn history_clear(state: State<'_, AppState>) -> Value {
         db.clear_history();
     }
     json!({ "ok": true })
+}
+
+#[tauri::command]
+pub async fn translate_stream(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    text: String,
+    src: String,
+    tgt: String,
+    tone: String,
+) -> Result<Value, String> {
+    use tauri::Emitter;
+    let seq = state
+        .stream_seq
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        + 1;
+
+    let cfg = crate::config::load_config(&state.root).unwrap_or_default();
+    let model = cfg
+        .default_model()
+        .cloned()
+        .ok_or_else(|| "还没有可用模型，请在设置里填写 API Key".to_string())?;
+    let provider = crate::provider::Provider::new(&model.base_url, &model.api_key, &cfg.proxy, 90)
+        .map_err(|e| format!("模型初始化失败：{e}"))?;
+    let db = Db::open(&state.root.join("data").join("bot.db")).map_err(|e| e.to_string())?;
+
+    let (src_code, tgt_code) = if src == "auto" {
+        let (s2, t2) = resolve_direction(&text, &cfg.languages.mine, &cfg.languages.partners);
+        (s2, if tgt == "auto" { t2 } else { tgt.clone() })
+    } else {
+        (src.clone(), if tgt == "auto" { cfg.languages.mine.clone() } else { tgt.clone() })
+    };
+
+    let translator = Translator {
+        provider: &provider,
+        db: &db,
+        cfg: &cfg,
+        model: model.model.clone(),
+    };
+
+    let started = std::time::Instant::now();
+    let app_handle = app.clone();
+    let alive = || {
+        state.stream_seq.load(std::sync::atomic::Ordering::SeqCst) == seq
+    };
+
+    let result = translator
+        .translate_stream(&text, &src_code, &tgt_code, &tone, |delta| {
+            if alive() {
+                let _ = app_handle.emit(
+                    "tr-chunk",
+                    json!({ "id": id, "text": delta }),
+                );
+            }
+        })
+        .await;
+
+    if !alive() {
+        return Ok(json!({ "ok": false, "stale": true }));
+    }
+
+    match result {
+        Ok((output, cached)) => {
+            db.bump_usage();
+            db.add_history(&src_code, &tgt_code, &tone, &text, &output, cached);
+            db.trim_history(500);
+            let _ = app.emit(
+                "tr-done",
+                json!({
+                    "id": id,
+                    "text": output,
+                    "src_name": language_name(&src_code),
+                    "tgt_name": language_name(&tgt_code),
+                    "elapsed_ms": started.elapsed().as_millis() as u64,
+                    "cached": cached,
+                }),
+            );
+            Ok(json!({ "ok": true }))
+        }
+        Err(e) => {
+            let _ = app.emit("tr-err", json!({ "id": id, "message": e.to_string() }));
+            Ok(json!({ "ok": false, "message": e.to_string() }))
+        }
+    }
 }

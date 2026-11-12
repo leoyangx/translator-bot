@@ -1,6 +1,7 @@
 //! OpenAI 兼容接口：模型列表 + 对话，带重试与中文错误。
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use serde_json::{json, Value};
 
 use crate::prompts::Message;
@@ -138,5 +139,66 @@ fn humanize(status: u16, body: &str) -> String {
         404 => "接口地址不对，或模型不存在（HTTP 404）".into(),
         429 => "请求太频繁被限流（HTTP 429），稍后再试".into(),
         _ => format!("模型调用失败（HTTP {status}）：{}", body.chars().take(160).collect::<String>()),
+    }
+}
+
+impl Provider {
+    /// 流式对话：每收到一段增量调用一次 on_delta，返回完整文本
+    pub async fn chat_stream<F>(
+        &self,
+        messages: &[Message],
+        model: &str,
+        temperature: f64,
+        mut on_delta: F,
+    ) -> anyhow::Result<String>
+    where
+        F: FnMut(&str),
+    {
+        let payload = json!({
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": true,
+        });
+        let resp = self
+            .client
+            .post(format!("{}/chat/completions", self.base))
+            .headers(self.headers())
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!(format!("模型服务连接失败：{e}")))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("{}", humanize(status.as_u16(), &body));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buf = String::new();
+        let mut full = String::new();
+        while let Some(chunk) = stream.next().await {
+            let bytes = chunk.map_err(|e| anyhow::anyhow!(format!("流式读取失败：{e}")))?;
+            buf.push_str(&String::from_utf8_lossy(&bytes));
+            while let Some(pos) = buf.find('\n') {
+                let line = buf[..pos].trim().to_string();
+                buf.drain(..=pos);
+                let Some(data) = line.strip_prefix("data:") else { continue };
+                let data = data.trim();
+                if data.is_empty() || data == "[DONE]" {
+                    continue;
+                }
+                if let Ok(v) = serde_json::from_str::<Value>(data) {
+                    if let Some(delta) = v["choices"][0]["delta"]["content"].as_str() {
+                        if !delta.is_empty() {
+                            full.push_str(delta);
+                            on_delta(delta);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(full)
     }
 }

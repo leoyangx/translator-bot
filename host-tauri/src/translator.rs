@@ -127,3 +127,62 @@ impl<'a> Translator<'a> {
         Ok(result.text)
     }
 }
+
+impl<'a> Translator<'a> {
+    /// 流式翻译：缓存命中时一次性回调；否则边生成边回调
+    pub async fn translate_stream<F>(
+        &self,
+        text: &str,
+        src: &str,
+        tgt: &str,
+        tone: &str,
+        mut on_delta: F,
+    ) -> anyhow::Result<(String, bool)>
+    where
+        F: FnMut(&str),
+    {
+        let text = text.trim();
+        if text.is_empty() {
+            anyhow::bail!("内容为空");
+        }
+        if text.chars().count() > self.cfg.features.max_input_chars {
+            anyhow::bail!(
+                "文本太长（{} 字符），请分段翻译",
+                text.chars().count()
+            );
+        }
+        let key = self.cache_key(text, src, tgt, tone);
+        if self.cfg.features.cache {
+            if let Some(hit) = self.db.cache_get(&key) {
+                on_delta(&hit);
+                return Ok((hit, true));
+            }
+        }
+        let glossary = if self.cfg.features.glossary {
+            self.db.glossary()
+        } else {
+            Vec::new()
+        };
+        let messages = build_messages(
+            text,
+            src,
+            tgt,
+            tone,
+            &glossary[..glossary.len().min(MAX_GLOSSARY)],
+            &[],
+            &self.cfg.prompts.translation,
+        );
+        let raw = self
+            .provider
+            .chat_stream(&messages, &self.model, 0.3, |delta| on_delta(delta))
+            .await?;
+        let output = clean_output(&raw);
+        if output.is_empty() {
+            anyhow::bail!("模型返回了空译文，请重试");
+        }
+        if self.cfg.features.cache {
+            self.db.cache_put(&key, &output);
+        }
+        Ok((output, false))
+    }
+}

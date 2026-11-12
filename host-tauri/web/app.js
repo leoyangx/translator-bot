@@ -9,17 +9,27 @@ let lastDirection = null;
 let recentLangs = [];
 let currentView = "text";
 
+/* 流式与自动翻译状态 */
+let seq = 0;
+let activeId = 0;
+let lastSentText = "";
+let lastOutput = "";
+let debounceTimer = null;
+let requestTimes = [];
+let autoPausedWarned = false;
+
 const THEME_KEY = "tb-theme";
 const RECENT_KEY = "tb-recent-langs";
+const AUTO_KEY = "tb-auto";
 
 async function invoke(method, payload) {
   if (!(window.__TAURI__ && window.__TAURI__.core)) throw new Error("请在桌面程序中运行");
   return await window.__TAURI__.core.invoke("ui_call", { method, args: payload === undefined ? [] : [payload] });
 }
 
-function nativeInvoke(cmd) {
+function nativeInvoke(cmd, payload) {
   if (!(window.__TAURI__ && window.__TAURI__.core)) throw new Error("请在桌面程序中运行");
-  return window.__TAURI__.core.invoke(cmd);
+  return window.__TAURI__.core.invoke(cmd, payload);
 }
 
 function toast(message, kind) {
@@ -36,7 +46,7 @@ function zhError(e) {
   return text;
 }
 
-/* ---------- 主题 ---------- */
+/* ---------------- 主题 ---------------- */
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   $("#btn-theme").textContent = theme === "dark" ? "☀" : "🌙";
@@ -49,7 +59,7 @@ function initTheme() {
   );
 }
 
-/* ---------- 视图切换 ---------- */
+/* ---------------- 视图 ---------------- */
 function switchView(name) {
   currentView = name;
   $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
@@ -60,7 +70,7 @@ function switchView(name) {
   if (name === "text") $("#input").focus();
 }
 
-/* ---------- 语言 ---------- */
+/* ---------------- 语言 ---------------- */
 function langName(code) {
   if (code === "auto") return "自动检测";
   const found = (S.languages || []).find((l) => l.code === code);
@@ -74,20 +84,16 @@ function renderLangList(keyword) {
   const kw = (keyword || "").trim().toLowerCase();
   const list = $("#lang-list");
   const rows = [];
-
   if (pickerFor === "src") {
     rows.push(`<div class="lang-item ${srcLang === "auto" ? "active" : ""}" data-code="auto">自动检测</div>`);
   }
-
   const matches = (S.languages || []).filter(
     (l) => !kw || l.name.toLowerCase().includes(kw) || l.code.toLowerCase().includes(kw)
   );
-
   function item(code) {
     const active = (pickerFor === "src" ? srcLang : tgtLang) === code;
     return `<div class="lang-item ${active ? "active" : ""}" data-code="${code}">${langName(code)}</div>`;
   }
-
   const recent = recentLangs.filter((c) => matches.some((l) => l.code === c));
   if (recent.length && !kw) {
     rows.push(`<div class="lang-caption">最近使用</div>`);
@@ -98,7 +104,6 @@ function renderLangList(keyword) {
     if (recent.includes(l.code) && !kw) return;
     rows.push(item(l.code));
   });
-
   list.innerHTML = rows.join("");
   list.querySelectorAll(".lang-item").forEach((el) =>
     el.addEventListener("click", () => chooseLang(el.dataset.code))
@@ -122,7 +127,8 @@ function chooseLang(code) {
   pushRecent(code);
   updateLangLabels();
   $("#lang-panel").hidden = true;
-  if ($("#input").value.trim()) doTranslate();
+  const text = $("#input").value.trim();
+  if (text) sendTranslate(text, true);
 }
 function pushRecent(code) {
   if (!code || code === "auto") return;
@@ -130,7 +136,7 @@ function pushRecent(code) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(recentLangs));
 }
 
-/* ---------- 启动 ---------- */
+/* ---------------- 启动 ---------------- */
 async function boot() {
   initTheme();
   recentLangs = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
@@ -150,7 +156,7 @@ async function boot() {
   tgtLang = mine === "zh" ? partner : mine;
   updateLangLabels();
   renderSettings();
-  bind();
+  bindEvents();
   $("#input").focus();
 }
 
@@ -162,11 +168,12 @@ function renderSettings() {
   $("#f-model").value = model.model || "";
   $("#f-proxy").value = cfg.proxy || "";
   $("#f-tone").value = (cfg.features && cfg.features.default_tone) || "natural";
+  $("#f-auto").checked = localStorage.getItem(AUTO_KEY) !== "off";
   $("#version-label").textContent = "v" + (S.version || "");
 }
 
-/* ---------- 事件 ---------- */
-function bind() {
+/* ---------------- 事件 ---------------- */
+function bindEvents() {
   $$(".tab").forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
 
   $("#btn-menu").addEventListener("click", (e) => {
@@ -182,7 +189,7 @@ function bind() {
       if (action === "settings") $("#drawer-settings").hidden = false;
       if (action === "data") await invoke("open_folder", "data");
       if (action === "about") toast(`翻译 v${S.version} · 本地运行，数据不出本机`);
-      if (action === "quit") nativeInvoke("plugin:process|exit").catch(() => invoke("quit_app"));
+      if (action === "quit") nativeInvoke("process|exit").catch(() => invoke("quit_app"));
     })
   );
 
@@ -194,14 +201,18 @@ function bind() {
   );
 
   $("#btn-swap").addEventListener("click", swapAndTranslate);
-  $("#btn-translate").addEventListener("click", () => doTranslate());
+
   $("#input").addEventListener("input", () => {
-    $("#char-count").textContent = `${$("#input").value.length} / 6000 字`;
+    const text = $("#input").value;
+    $("#char-count").textContent = `${text.length} / 6000 字`;
+    onTextChanged(text);
   });
+
   $("#input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      doTranslate();
+      const text = $("#input").value.trim();
+      if (text) sendTranslate(text, true);
     }
   });
 
@@ -215,11 +226,9 @@ function bind() {
   $("#btn-clear").addEventListener("click", () => {
     $("#input").value = "";
     $("#char-count").textContent = "0 / 6000 字";
-    $("#output").classList.add("hidden");
-    $("#output-placeholder").classList.remove("hidden");
-    $("#output-error").classList.add("hidden");
-    $("#meta").textContent = "";
-    lastDirection = null;
+    resetOutput();
+    lastSentText = "";
+    lastOutput = "";
     $("#input").focus();
   });
 
@@ -244,6 +253,11 @@ function bind() {
   $("#btn-save").addEventListener("click", saveSettings);
   $("#btn-check-update").addEventListener("click", checkUpdate);
 
+  $("#f-auto").addEventListener("change", (e) => {
+    localStorage.setItem(AUTO_KEY, e.target.checked ? "on" : "off");
+    toast(e.target.checked ? "已开启自动翻译" : "已关闭自动翻译，Ctrl+Enter 手动翻译");
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("#lang-panel").hidden) return ($("#lang-panel").hidden = true);
@@ -257,78 +271,157 @@ function bind() {
     if (e.target.closest("#lang-panel") || e.target.closest("#btn-src") || e.target.closest("#btn-tgt")) return;
     $("#lang-panel").hidden = true;
   });
+
+  listenStream();
 }
 
-/* ---------- 翻译 ---------- */
-async function doTranslate() {
-  const text = $("#input").value.trim();
-  if (!text) return toast("先输入要翻译的内容", "err");
-
-  const btn = $("#btn-translate");
-  btn.disabled = true;
-  $("#output-placeholder").classList.add("hidden");
-  $("#output-error").classList.add("hidden");
-
-  try {
-    const res = await invoke("translate", { text, src: srcLang, tgt: tgtLang, tone: currentTone() });
-    if (!res || !res.ok) {
-      $("#output").classList.add("hidden");
-      $("#output-error").textContent = (res && res.message) || "翻译失败";
-      $("#output-error").classList.remove("hidden");
-      $("#meta").textContent = "";
-      return;
-    }
-    $("#output").textContent = res.translation;
-    $("#output").classList.remove("hidden");
-    lastDirection = { src: res.src, tgt: res.tgt };
-    const parts = [`${res.src_name} → ${res.tgt_name}`, `${res.elapsed_ms} ms`];
-    if (res.cached) parts.push("缓存命中");
-    $("#meta").textContent = parts.join(" · ");
-  } catch (e) {
-    $("#output").classList.add("hidden");
-    $("#output-error").textContent = zhError(e);
-    $("#output-error").classList.remove("hidden");
-  } finally {
-    btn.disabled = false;
-  }
+/* ---------------- 自动翻译触发（平衡档） ---------------- */
+function autoEnabled() {
+  return localStorage.getItem(AUTO_KEY) !== "off";
 }
 
-/** ⇄ 互换：译文搬进输入框 + 语言对调 + 重新翻译 */
-async function swapAndTranslate() {
-  const output = $("#output").textContent.trim();
-  const hasResult = !!output && !$("#output").classList.contains("hidden");
+function endsWithSentence(text) {
+  return /[。！？.!?；;：:\n]\s*$/.test(text);
+}
 
-  let newSrc = tgtLang;
-  let newTgt = srcLang;
-  if (lastDirection) {
-    newSrc = lastDirection.tgt;
-    newTgt = lastDirection.src;
-  }
-  if (newSrc === "auto") newSrc = lastDirection ? lastDirection.tgt : "zh";
+function onTextChanged(rawText) {
+  const text = rawText.trim();
 
-  srcLang = newSrc;
-  tgtLang = newTgt;
-  updateLangLabels();
-
-  if (!hasResult) {
-    if ($("#input").value.trim()) doTranslate();
+  if (!text) {
+    clearTimeout(debounceTimer);
+    activeId = 0;
+    lastSentText = "";
+    lastOutput = "";
+    resetOutput();
     return;
   }
 
-  $("#input").value = output;
-  $("#input").dispatchEvent(new Event("input"));
-  lastDirection = null;
+  if (!autoEnabled()) return;
+  if (text === lastSentText) return;
+
+  clearTimeout(debounceTimer);
+  const delay = endsWithSentence(text) ? 120 : 800;
+  debounceTimer = setTimeout(() => sendTranslate(text, false), delay);
+}
+
+function rateLimitOk() {
+  const now = Date.now();
+  requestTimes = requestTimes.filter((t) => now - t < 60000);
+  if (requestTimes.length >= 12) {
+    if (!autoPausedWarned) {
+      autoPausedWarned = true;
+      toast("自动翻译暂停：每分钟最多 12 次，可 Ctrl+Enter 手动翻译", "err");
+    }
+    return false;
+  }
+  requestTimes.push(now);
+  autoPausedWarned = false;
+  return true;
+}
+
+/* ---------------- 流式请求 ---------------- */
+function resetOutput() {
+  $("#output").textContent = "";
   $("#output").classList.add("hidden");
+  $("#output-error").classList.add("hidden");
   $("#output-placeholder").classList.remove("hidden");
-  switchView("text");
-  await doTranslate();
+  $("#meta").textContent = "";
+}
+
+async function sendTranslate(text, force) {
+  text = text.trim();
+  if (!text) return;
+  if (!force && !rateLimitOk()) return;
+
+  clearTimeout(debounceTimer);
+  const id = ++seq;
+  activeId = id;
+  lastSentText = text;
+
+  try {
+    await nativeInvoke("translate_stream", {
+      id,
+      text,
+      src: srcLang,
+      tgt: tgtLang,
+      tone: currentTone(),
+    });
+  } catch (e) {
+    if (id !== activeId) return;
+    $("#output").classList.add("hidden");
+    $("#output-error").textContent = zhError(e);
+    $("#output-error").classList.remove("hidden");
+  }
+}
+
+function listenStream() {
+  if (!(window.__TAURI__ && window.__TAURI__.event)) return;
+
+  window.__TAURI__.event.listen("tr-chunk", (event) => {
+    const data = event.payload || {};
+    if (data.id !== activeId) return;
+    $("#output-placeholder").classList.add("hidden");
+    $("#output-error").classList.add("hidden");
+    const el = $("#output");
+    el.classList.remove("hidden");
+    el.textContent += data.text || "";
+  });
+
+  window.__TAURI__.event.listen("tr-done", (event) => {
+    const data = event.payload || {};
+    if (data.id !== activeId) return;
+    $("#output-placeholder").classList.add("hidden");
+    $("#output-error").classList.add("hidden");
+    const el = $("#output");
+    el.classList.remove("hidden");
+    el.textContent = data.text || el.textContent;
+    lastOutput = el.textContent;
+    const parts = [`${data.src_name} → ${data.tgt_name}`, `${data.elapsed_ms} ms`];
+    if (data.cached) parts.push("缓存命中");
+    $("#meta").textContent = parts.join(" · ");
+  });
+
+  window.__TAURI__.event.listen("tr-err", (event) => {
+    const data = event.payload || {};
+    if (data.id !== activeId) return;
+    $("#output").classList.add("hidden");
+    $("#output-error").textContent = data.message || "翻译失败";
+    $("#output-error").classList.remove("hidden");
+  });
 }
 
 function currentTone() {
   return ($("#f-tone") && $("#f-tone").value) || "natural";
 }
 
-/* ---------- 术语表 ---------- */
+/* ---------------- ⇄ 互换 ---------------- */
+async function swapAndTranslate() {
+  const output = ($("#output").textContent || "").trim();
+  const hasResult = !!output && !$("#output").classList.contains("hidden");
+
+  let newSrc = lastDirection ? lastDirection.tgt : tgtLang;
+  let newTgt = lastDirection ? lastDirection.src : srcLang;
+  if (newSrc === "auto") newSrc = "zh";
+
+  srcLang = newSrc;
+  tgtLang = newTgt;
+  updateLangLabels();
+
+  if (!hasResult) {
+    const text = $("#input").value.trim();
+    if (text) sendTranslate(text, true);
+    return;
+  }
+
+  $("#input").value = output;
+  $("#input").dispatchEvent(new Event("input"));
+  lastDirection = null;
+  resetOutput();
+  switchView("text");
+  await sendTranslate(output, true);
+}
+
+/* ---------------- 术语表 / 历史 ---------------- */
 async function refreshGlossary() {
   const rows = (await invoke("glossary_list")) || [];
   const list = $("#glossary-list");
@@ -369,7 +462,6 @@ async function addGlossary() {
   }
 }
 
-/* ---------- 历史 ---------- */
 async function refreshHistory() {
   const rows = (await invoke("history_list", 500)) || [];
   const list = $("#history-list");
@@ -395,7 +487,7 @@ async function refreshHistory() {
       lastDirection = { src: row.dataset.src, tgt: row.dataset.tgt };
       updateLangLabels();
       switchView("text");
-      doTranslate();
+      sendTranslate(row.dataset.source, true);
     })
   );
 }
@@ -406,7 +498,7 @@ function formatTime(ts) {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/* ---------- 设置 ---------- */
+/* ---------------- 设置 ---------------- */
 async function testModel() {
   const out = $("#test-result");
   out.textContent = "测试中…";
@@ -461,7 +553,7 @@ async function checkUpdate() {
   }
 }
 
-/* ---------- 工具 ---------- */
+/* ---------------- 工具 ---------------- */
 function escapeHtml(text) {
   return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 }

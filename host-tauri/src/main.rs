@@ -308,6 +308,7 @@ fn main() {
             commands::set_autostart,
             commands::ui_call,
             commands::translate_text,
+            commands::translate_stream,
             commands::languages_list,
             commands::glossary_list,
             commands::glossary_save,
@@ -324,6 +325,7 @@ fn main() {
                 root: home.clone(),
                 cfg: std::sync::Mutex::new(cfg.clone()),
                 port: std::sync::Mutex::new(None),
+                stream_seq: std::sync::atomic::AtomicU64::new(0),
             });
 
 
