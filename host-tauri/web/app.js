@@ -348,10 +348,10 @@ function onTextChanged(rawText) {
 function rateLimitOk() {
   const now = Date.now();
   requestTimes = requestTimes.filter((t) => now - t < 60000);
-  if (requestTimes.length >= 12) {
+  if (requestTimes.length >= 30) {
     if (!autoPausedWarned) {
       autoPausedWarned = true;
-      toast("自动翻译暂停：每分钟最多 12 次，可 Ctrl+Enter 手动翻译", "err");
+      toast("自动翻译暂停：每分钟最多 30 次，可 Ctrl+Enter 手动翻译", "err");
     }
     return false;
   }
