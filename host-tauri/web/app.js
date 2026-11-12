@@ -49,7 +49,6 @@ function zhError(e) {
 /* ---------------- 主题 ---------------- */
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  $("#btn-theme").textContent = theme === "dark" ? "☀" : "🌙";
   localStorage.setItem(THEME_KEY, theme);
 }
 function initTheme() {
@@ -174,6 +173,7 @@ function renderSettings() {
 
 /* ---------------- 事件 ---------------- */
 function bindEvents() {
+  setupWindowControls();
   $$(".tab").forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
 
   $("#btn-menu").addEventListener("click", (e) => {
@@ -273,6 +273,33 @@ function bindEvents() {
   });
 
   listenStream();
+}
+
+/* ---------------- 窗口控制（自绘标题栏） ---------------- */
+function appWindow() {
+  try {
+    return window.__TAURI__.window.getCurrentWindow();
+  } catch (e) {
+    return null;
+  }
+}
+
+function setupWindowControls() {
+  const win = appWindow();
+  if (!win) return;
+
+  $("#win-min").addEventListener("click", () => win.minimize());
+  $("#win-max").addEventListener("click", () => win.toggleMaximize());
+  $("#win-close").addEventListener("click", () => win.close());
+
+  $$(".rh").forEach((el) => {
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      win.startResizeDragging(el.dataset.dir);
+    });
+  });
+
+  win.onResized?.(() => {});
 }
 
 /* ---------------- 自动翻译触发（平衡档） ---------------- */

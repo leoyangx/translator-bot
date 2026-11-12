@@ -36,71 +36,64 @@ html, body {
 
 button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
 
-/* 顶栏 */
-.topbar {
-  display: flex; align-items: center; gap: 10px;
-  height: 54px; padding: 0 12px;
-  border-bottom: 1px solid var(--line);
+/* 标题栏（自绘） */
+.titlebar {
+  display: flex; align-items: center; gap: 8px;
+  height: 46px; padding: 0 0 0 8px;
   background: var(--panel);
-  position: relative;
+  border-bottom: 1px solid var(--line);
+  user-select: none;
 }
-
-.menu-wrap { position: relative; }
-
-.menu-pop {
-  position: absolute; top: 40px; left: 0;
-  min-width: 170px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  padding: 6px;
-  z-index: 50;
-}
-.menu-item {
-  display: block; width: 100%; text-align: left;
-  padding: 9px 12px; border: none; background: transparent;
-  border-radius: 7px; cursor: pointer; font-size: 13px;
-}
-.menu-item:hover { background: var(--accent-soft); color: var(--accent); }
-.menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
+.tb-left { display: flex; align-items: center; gap: 6px; }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 
 .tabs { display: flex; gap: 2px; }
 .tab {
+  display: flex; align-items: center; gap: 6px;
   position: relative;
-  padding: 8px 14px;
+  padding: 7px 12px;
   border: none; background: transparent;
-  color: var(--muted); font-size: 14px;
+  color: var(--muted); font-size: 13.5px;
   cursor: pointer; border-radius: 8px;
 }
-.tab:hover { color: var(--text); background: rgba(0,0,0,.03); }
+.tab svg { opacity: .9; }
+.tab:hover { color: var(--text); background: rgba(0,0,0,.035); }
 html[data-theme="dark"] .tab:hover { background: rgba(255,255,255,.05); }
-.tab.active { color: var(--accent); font-weight: 600; }
+.tab.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .tab.active::after {
-  content: ""; position: absolute; left: 14px; right: 14px; bottom: 2px;
-  height: 2px; border-radius: 2px; background: var(--accent);
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px;
+  height: 2px; border-radius: 2px 2px 0 0; background: var(--accent);
 }
 
-.top-right { margin-left: auto; display: flex; gap: 6px; }
-
-.icon-btn, .ghost-btn, .primary-btn {
-  border-radius: 9px; cursor: pointer;
-  transition: background .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease;
-}
 .icon-btn {
-  width: 34px; height: 34px; display: grid; place-items: center;
-  background: transparent; border: 1px solid transparent;
-  color: var(--muted); font-size: 15px;
+  width: 32px; height: 32px; display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  color: var(--muted); cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 .icon-btn:hover { background: var(--bg); border-color: var(--line); color: var(--text); }
-.ghost-btn { padding: 8px 13px; background: transparent; border: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-.ghost-btn:hover { color: var(--text); border-color: var(--muted); }
-.primary-btn { padding: 9px 18px; background: var(--accent); border: 1px solid var(--accent); color: #fff; font-weight: 600; font-size: 13px; }
-.primary-btn:hover { filter: brightness(1.06); }
-.primary-btn:disabled { opacity: .55; cursor: default; filter: none; }
-.kbd { font-size: 11px; opacity: .75; margin-left: 4px; }
 
-/* 语言栏 */
+.win-controls { display: flex; align-items: stretch; height: 46px; margin-left: 6px; }
+.win-btn {
+  width: 46px; height: 46px; display: grid; place-items: center;
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.win-btn:hover { background: rgba(0,0,0,.06); color: var(--text); }
+html[data-theme="dark"] .win-btn:hover { background: rgba(255,255,255,.08); }
+.win-btn.close:hover { background: #e81123; color: #fff; }
+
+/* 缩放热区 */
+.rh { position: fixed; z-index: 70; }
+.rh.n { top: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+.rh.s { bottom: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+.rh.w { left: 0; top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; }
+.rh.e { right: 0; top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; }
+.rh.nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.rh.ne { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.rh.sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.rh.se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+
 .langbar {
   display: grid; grid-template-columns: 1fr auto 1fr;
   align-items: center; justify-items: center; gap: 10px;
@@ -131,7 +124,7 @@ html[data-theme="dark"] .tab:hover { background: rgba(255,255,255,.05); }
 .swap-btn:hover { color: var(--accent); border-color: var(--accent); transform: rotate(180deg); }
 
 /* 主区 */
-.main { height: calc(100% - 116px); overflow: hidden; }
+.main { height: calc(100% - 108px); overflow: hidden; }
 .view { display: none; height: 100%; }
 .view.active { display: block; }
 
@@ -198,7 +191,7 @@ html[data-theme="dark"] .tab:hover { background: rgba(255,255,255,.05); }
 
 /* 语言面板 */
 .lang-panel {
-  position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+  position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
   width: min(560px, 92vw); max-height: min(520px, 70vh);
   display: flex; flex-direction: column;
   background: var(--bg); border: 1px solid var(--line);

@@ -336,6 +336,8 @@ fn main() {
                 .inner_size(1080.0, 720.0)
                 .min_inner_size(880.0, 560.0)
                 .background_color(tauri::window::Color(11, 15, 26, 255))
+                .decorations(false)
+                .shadow(true)
                 .data_directory(home.join("data").join("webview2"))
                 .icon(icon.clone())?
                 .build()?;
