@@ -8,20 +8,24 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="titlebar" data-tauri-drag-region>
+  <header class="titlebar">
+    <div class="drag-fill" data-tauri-drag-region></div>
+
     <div class="tb-left">
       <button id="btn-menu" class="icon-btn" title="菜单" aria-label="菜单">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-
+      <div class="menu-pop" id="menu-pop" hidden>
+        <button class="menu-item" data-menu="settings">设置</button>
+        <button class="menu-item" data-menu="data">打开数据目录</button>
+        <button class="menu-item" data-menu="about">关于</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" data-menu="quit">退出</button>
+      </div>
       <nav class="tabs">
         <button class="tab active" data-view="text">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9M8.5 6v12M4 18h9"/><path d="M15 11h5M17.5 11v7M15 18h5"/></svg>
           文本
-        </button>
-        <button class="tab" data-view="glossary">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14v16h4.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
-          术语表
         </button>
         <button class="tab" data-view="history">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
@@ -42,7 +46,6 @@
     </div>
   </header>
 
-  <!-- 无边框窗口的缩放热区 -->
   <div class="rh n" data-dir="North"></div>
   <div class="rh s" data-dir="South"></div>
   <div class="rh w" data-dir="West"></div>
@@ -62,19 +65,26 @@
       <span id="tgt-label">英语</span>
       <span class="caret">▾</span>
     </button>
+    <button id="btn-toolbar" class="toolbar-btn" title="工具栏">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M8 9h4M8 13h4"/></svg>
+      工具栏
+    </button>
   </div>
 
   <main class="main">
-    <!-- 文本 -->
     <section class="view active" id="view-text">
       <div class="workspace">
         <section class="pane pane-input">
-          <textarea id="input" placeholder="输入或粘贴文本进行翻译" spellcheck="false"></textarea>
+          <div class="input-wrap">
+            <textarea id="input" placeholder="输入或粘贴文本进行翻译" spellcheck="false"></textarea>
+            <button id="btn-clear" class="clear-btn" title="清空输入" hidden>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
           <div class="pane-foot">
             <span id="char-count" class="meta">0 / 6000 字</span>
             <div class="foot-actions">
-              <span class="meta" id="auto-hint">自动翻译已开启 · Ctrl+Enter 立即翻译</span>
-              <button id="btn-clear" class="ghost-btn">清空</button>
+              <span class="meta" id="auto-hint">输入后自动翻译</span>
             </div>
           </div>
         </section>
@@ -88,28 +98,15 @@
           <div class="pane-foot">
             <span id="meta" class="meta"></span>
             <div class="foot-actions">
-              <button id="btn-copy" class="ghost-btn">复制</button>
+              <button id="btn-copy" class="icon-btn" title="复制译文">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4H5.5A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg>
+              </button>
             </div>
           </div>
         </section>
       </div>
     </section>
 
-    <!-- 术语表 -->
-    <section class="view" id="view-glossary">
-      <div class="page">
-        <h1>术语表</h1>
-        <p class="hint">把品牌名、行业词的译法固定下来，翻译时强制按这里的结果输出，避免每次译得不一样。</p>
-        <div class="glossary-add">
-          <input id="glossary-source" placeholder="原文，例如 Jian Zhan">
-          <input id="glossary-target" placeholder="译文，例如 建盏">
-          <button id="btn-glossary-add" class="primary-btn">添加</button>
-        </div>
-        <div id="glossary-list" class="list"></div>
-      </div>
-    </section>
-
-    <!-- 历史 -->
     <section class="view" id="view-history">
       <div class="page">
         <div class="page-head">
@@ -121,6 +118,53 @@
       </div>
     </section>
   </main>
+
+  <!-- 工具栏（右侧面板） -->
+  <aside class="toolbar-panel" id="toolbar" hidden>
+    <div class="tp-head">
+      <h3>工具栏</h3>
+      <button class="icon-btn" data-close-toolbar title="收起">✕</button>
+    </div>
+
+    <div class="tp-section">
+      <div class="tp-label">翻译语气</div>
+      <select id="tp-tone">
+        <option value="natural">自然</option>
+        <option value="formal">正式</option>
+        <option value="casual">口语</option>
+        <option value="literal">直译</option>
+      </select>
+    </div>
+
+    <div class="tp-row">
+      <div><div class="name">自动翻译</div><div class="desc">停止输入约 0.8 秒后自动翻译</div></div>
+      <label class="switch"><input type="checkbox" id="tp-auto"><span></span></label>
+    </div>
+
+    <div class="tp-row">
+      <div><div class="name">术语表</div><div class="desc">翻译时强制使用自定义译法</div></div>
+      <label class="switch"><input type="checkbox" id="tp-glossary"><span></span></label>
+    </div>
+
+    <button id="btn-manage-glossary" class="ghost-btn block">管理术语表</button>
+  </aside>
+
+  <!-- 术语表弹层 -->
+  <div class="modal" id="modal-glossary" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2>术语表</h2>
+        <button class="icon-btn" data-close-modal>✕</button>
+      </div>
+      <p class="hint">把品牌名、行业词的译法固定下来，翻译时按这里的译法输出。</p>
+      <div class="glossary-add">
+        <input id="glossary-source" placeholder="原文，例如 发票">
+        <input id="glossary-target" placeholder="译文，例如 인보이스">
+        <button id="btn-glossary-add" class="primary-btn">添加</button>
+      </div>
+      <div id="glossary-list" class="list"></div>
+    </div>
+  </div>
 
   <!-- 语言面板 -->
   <div class="lang-panel" id="lang-panel" hidden>
@@ -147,19 +191,7 @@
       <span id="test-result" class="meta"></span>
     </div>
 
-    <h3>翻译</h3>
-    <div class="switch-row">
-      <div><div class="name">自动翻译</div><div class="desc">停止输入约 0.8 秒或打标点后自动翻译</div></div>
-      <label class="switch"><input type="checkbox" id="f-auto"><span></span></label>
-    </div>
-    <label class="field">默认语气
-      <select id="f-tone">
-        <option value="natural">自然</option>
-        <option value="formal">正式</option>
-        <option value="casual">口语</option>
-        <option value="literal">直译</option>
-      </select>
-    </label>
+    <h3>网络</h3>
     <label class="field">代理（可选）<input id="f-proxy" placeholder="http://127.0.0.1:7890"></label>
 
     <h3>更新</h3>

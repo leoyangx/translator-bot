@@ -9,11 +9,9 @@ let lastDirection = null;
 let recentLangs = [];
 let currentView = "text";
 
-/* 流式与自动翻译状态 */
 let seq = 0;
 let activeId = 0;
 let lastSentText = "";
-let lastOutput = "";
 let debounceTimer = null;
 let requestTimes = [];
 let autoPausedWarned = false;
@@ -26,12 +24,10 @@ async function invoke(method, payload) {
   if (!(window.__TAURI__ && window.__TAURI__.core)) throw new Error("请在桌面程序中运行");
   return await window.__TAURI__.core.invoke("ui_call", { method, args: payload === undefined ? [] : [payload] });
 }
-
 function nativeInvoke(cmd, payload) {
   if (!(window.__TAURI__ && window.__TAURI__.core)) throw new Error("请在桌面程序中运行");
   return window.__TAURI__.core.invoke(cmd, payload);
 }
-
 function toast(message, kind) {
   const el = $("#toast");
   el.textContent = message;
@@ -39,14 +35,13 @@ function toast(message, kind) {
   clearTimeout(el._timer);
   el._timer = setTimeout(() => (el.className = "toast" + (kind === "err" ? " err" : "")), 2200);
 }
-
 function zhError(e) {
   const text = (e && (e.message || e.toString())) || "未知错误";
   if (/timeout|超时/i.test(text)) return "连接超时，请检查网络或代理";
   return text;
 }
 
-/* ---------------- 主题 ---------------- */
+/* 主题 */
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem(THEME_KEY, theme);
@@ -58,18 +53,17 @@ function initTheme() {
   );
 }
 
-/* ---------------- 视图 ---------------- */
+/* 视图 */
 function switchView(name) {
   currentView = name;
   $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
   $("#langbar").hidden = name !== "text";
-  if (name === "glossary") refreshGlossary();
   if (name === "history") refreshHistory();
   if (name === "text") $("#input").focus();
 }
 
-/* ---------------- 语言 ---------------- */
+/* 语言 */
 function langName(code) {
   if (code === "auto") return "自动检测";
   const found = (S.languages || []).find((l) => l.code === code);
@@ -135,7 +129,7 @@ function pushRecent(code) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(recentLangs));
 }
 
-/* ---------------- 启动 ---------------- */
+/* 启动 */
 async function boot() {
   initTheme();
   recentLangs = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
@@ -156,6 +150,7 @@ async function boot() {
   updateLangLabels();
   renderSettings();
   bindEvents();
+  updateAutoHint();
   $("#input").focus();
 }
 
@@ -166,14 +161,17 @@ function renderSettings() {
   $("#f-key").value = model.api_key || "";
   $("#f-model").value = model.model || "";
   $("#f-proxy").value = cfg.proxy || "";
-  $("#f-tone").value = (cfg.features && cfg.features.default_tone) || "natural";
-  $("#f-auto").checked = localStorage.getItem(AUTO_KEY) !== "off";
   $("#version-label").textContent = "v" + (S.version || "");
+
+  $("#tp-tone").value = (cfg.features && cfg.features.default_tone) || "natural";
+  $("#tp-glossary").checked = !(cfg.features && cfg.features.glossary === false);
+  $("#tp-auto").checked = localStorage.getItem(AUTO_KEY) !== "off";
 }
 
-/* ---------------- 事件 ---------------- */
+/* 事件 */
 function bindEvents() {
   setupWindowControls();
+
   $$(".tab").forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
 
   $("#btn-menu").addEventListener("click", (e) => {
@@ -202,9 +200,40 @@ function bindEvents() {
 
   $("#btn-swap").addEventListener("click", swapAndTranslate);
 
+  $("#btn-toolbar").addEventListener("click", () => {
+    const panel = $("#toolbar");
+    panel.hidden = !panel.hidden;
+    $("#btn-toolbar").classList.toggle("active", !panel.hidden);
+  });
+  $$("[data-close-toolbar]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      $("#toolbar").hidden = true;
+      $("#btn-toolbar").classList.remove("active");
+    })
+  );
+
+  $("#tp-tone").addEventListener("change", (e) => persistFeatures({ default_tone: e.target.value }));
+  $("#tp-glossary").addEventListener("change", (e) =>
+    persistFeatures({ glossary: e.target.checked }, e.target.checked ? "术语表已启用" : "术语表已停用")
+  );
+  $("#tp-auto").addEventListener("change", (e) => {
+    localStorage.setItem(AUTO_KEY, e.target.checked ? "on" : "off");
+    updateAutoHint();
+    toast(e.target.checked ? "已开启自动翻译" : "已关闭自动翻译，Ctrl+Enter 手动翻译");
+  });
+
+  $("#btn-manage-glossary").addEventListener("click", async () => {
+    $("#modal-glossary").hidden = false;
+    await refreshGlossary();
+  });
+  $$("[data-close-modal]").forEach((btn) =>
+    btn.addEventListener("click", () => ($("#modal-glossary").hidden = true))
+  );
+
   $("#input").addEventListener("input", () => {
     const text = $("#input").value;
     $("#char-count").textContent = `${text.length} / 6000 字`;
+    $("#btn-clear").hidden = text.length === 0;
     onTextChanged(text);
   });
 
@@ -226,9 +255,9 @@ function bindEvents() {
   $("#btn-clear").addEventListener("click", () => {
     $("#input").value = "";
     $("#char-count").textContent = "0 / 6000 字";
+    $("#btn-clear").hidden = true;
     resetOutput();
     lastSentText = "";
-    lastOutput = "";
     $("#input").focus();
   });
 
@@ -253,15 +282,10 @@ function bindEvents() {
   $("#btn-save").addEventListener("click", saveSettings);
   $("#btn-check-update").addEventListener("click", checkUpdate);
 
-  $("#f-auto").addEventListener("change", (e) => {
-    localStorage.setItem(AUTO_KEY, e.target.checked ? "on" : "off");
-    toast(e.target.checked ? "已开启自动翻译" : "已关闭自动翻译，Ctrl+Enter 手动翻译");
-  });
-
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (!$("#modal-glossary").hidden) return ($("#modal-glossary").hidden = true);
     if (!$("#lang-panel").hidden) return ($("#lang-panel").hidden = true);
-    if (!$("#menu-pop").hidden) return ($("#menu-pop").hidden = true);
     const open = $$(".drawer").find((d) => !d.hidden);
     if (open) open.hidden = true;
   });
@@ -275,62 +299,52 @@ function bindEvents() {
   listenStream();
 }
 
-/* ---------------- 窗口控制（自绘标题栏） ---------------- */
-function appWindow() {
-  try {
-    return window.__TAURI__.window.getCurrentWindow();
-  } catch (e) {
-    return null;
-  }
-}
-
+/* 窗口控制 */
 function setupWindowControls() {
-  const win = appWindow();
-  if (!win) return;
-
+  let win = null;
+  try {
+    win = window.__TAURI__.window.getCurrentWindow();
+  } catch (e) {
+    return;
+  }
   $("#win-min").addEventListener("click", () => win.minimize());
   $("#win-max").addEventListener("click", () => win.toggleMaximize());
   $("#win-close").addEventListener("click", () => win.close());
-
-  $$(".rh").forEach((el) => {
+  $$(".rh").forEach((el) =>
     el.addEventListener("mousedown", (e) => {
       e.preventDefault();
       win.startResizeDragging(el.dataset.dir);
-    });
-  });
-
-  win.onResized?.(() => {});
+    })
+  );
 }
 
-/* ---------------- 自动翻译触发（平衡档） ---------------- */
+/* 自动翻译触发 */
 function autoEnabled() {
   return localStorage.getItem(AUTO_KEY) !== "off";
 }
-
+function updateAutoHint() {
+  $("#auto-hint").textContent = autoEnabled()
+    ? "输入后自动翻译 · Ctrl+Enter 立即翻译"
+    : "自动翻译已关闭 · Ctrl+Enter 手动翻译";
+}
 function endsWithSentence(text) {
   return /[。！？.!?；;：:\n]\s*$/.test(text);
 }
-
 function onTextChanged(rawText) {
   const text = rawText.trim();
-
   if (!text) {
     clearTimeout(debounceTimer);
     activeId = 0;
     lastSentText = "";
-    lastOutput = "";
     resetOutput();
     return;
   }
-
   if (!autoEnabled()) return;
   if (text === lastSentText) return;
-
   clearTimeout(debounceTimer);
   const delay = endsWithSentence(text) ? 120 : 800;
   debounceTimer = setTimeout(() => sendTranslate(text, false), delay);
 }
-
 function rateLimitOk() {
   const now = Date.now();
   requestTimes = requestTimes.filter((t) => now - t < 60000);
@@ -346,7 +360,7 @@ function rateLimitOk() {
   return true;
 }
 
-/* ---------------- 流式请求 ---------------- */
+/* 流式 */
 function resetOutput() {
   $("#output").textContent = "";
   $("#output").classList.add("hidden");
@@ -354,25 +368,16 @@ function resetOutput() {
   $("#output-placeholder").classList.remove("hidden");
   $("#meta").textContent = "";
 }
-
 async function sendTranslate(text, force) {
   text = text.trim();
   if (!text) return;
   if (!force && !rateLimitOk()) return;
-
   clearTimeout(debounceTimer);
   const id = ++seq;
   activeId = id;
   lastSentText = text;
-
   try {
-    await nativeInvoke("translate_stream", {
-      id,
-      text,
-      src: srcLang,
-      tgt: tgtLang,
-      tone: currentTone(),
-    });
+    await nativeInvoke("translate_stream", { id, text, src: srcLang, tgt: tgtLang, tone: currentTone() });
   } catch (e) {
     if (id !== activeId) return;
     $("#output").classList.add("hidden");
@@ -380,10 +385,8 @@ async function sendTranslate(text, force) {
     $("#output-error").classList.remove("hidden");
   }
 }
-
 function listenStream() {
   if (!(window.__TAURI__ && window.__TAURI__.event)) return;
-
   window.__TAURI__.event.listen("tr-chunk", (event) => {
     const data = event.payload || {};
     if (data.id !== activeId) return;
@@ -393,21 +396,17 @@ function listenStream() {
     el.classList.remove("hidden");
     el.textContent += data.text || "";
   });
-
   window.__TAURI__.event.listen("tr-done", (event) => {
     const data = event.payload || {};
     if (data.id !== activeId) return;
     $("#output-placeholder").classList.add("hidden");
-    $("#output-error").classList.add("hidden");
     const el = $("#output");
     el.classList.remove("hidden");
     el.textContent = data.text || el.textContent;
-    lastOutput = el.textContent;
     const parts = [`${data.src_name} → ${data.tgt_name}`, `${data.elapsed_ms} ms`];
     if (data.cached) parts.push("缓存命中");
     $("#meta").textContent = parts.join(" · ");
   });
-
   window.__TAURI__.event.listen("tr-err", (event) => {
     const data = event.payload || {};
     if (data.id !== activeId) return;
@@ -416,30 +415,25 @@ function listenStream() {
     $("#output-error").classList.remove("hidden");
   });
 }
-
 function currentTone() {
-  return ($("#f-tone") && $("#f-tone").value) || "natural";
+  return ($("#tp-tone") && $("#tp-tone").value) || "natural";
 }
 
-/* ---------------- ⇄ 互换 ---------------- */
+/* ⇄ */
 async function swapAndTranslate() {
   const output = ($("#output").textContent || "").trim();
   const hasResult = !!output && !$("#output").classList.contains("hidden");
-
   let newSrc = lastDirection ? lastDirection.tgt : tgtLang;
   let newTgt = lastDirection ? lastDirection.src : srcLang;
   if (newSrc === "auto") newSrc = "zh";
-
   srcLang = newSrc;
   tgtLang = newTgt;
   updateLangLabels();
-
   if (!hasResult) {
     const text = $("#input").value.trim();
     if (text) sendTranslate(text, true);
     return;
   }
-
   $("#input").value = output;
   $("#input").dispatchEvent(new Event("input"));
   lastDirection = null;
@@ -448,12 +442,12 @@ async function swapAndTranslate() {
   await sendTranslate(output, true);
 }
 
-/* ---------------- 术语表 / 历史 ---------------- */
+/* 术语表 */
 async function refreshGlossary() {
   const rows = (await invoke("glossary_list")) || [];
   const list = $("#glossary-list");
   if (!rows.length) {
-    list.innerHTML = `<p class="hint">还没有条目。加一条试试：原文 <code>Jian Zhan</code> → 译文 <code>建盏</code>。</p>`;
+    list.innerHTML = `<p class="hint">还没有条目。示例：原文「发票」→ 译文「인보이스」。</p>`;
     return;
   }
   list.innerHTML = rows
@@ -473,7 +467,6 @@ async function refreshGlossary() {
     })
   );
 }
-
 async function addGlossary() {
   const source = $("#glossary-source").value.trim();
   const target = $("#glossary-target").value.trim();
@@ -489,6 +482,7 @@ async function addGlossary() {
   }
 }
 
+/* 历史 */
 async function refreshHistory() {
   const rows = (await invoke("history_list", 500)) || [];
   const list = $("#history-list");
@@ -518,14 +512,25 @@ async function refreshHistory() {
     })
   );
 }
-
 function formatTime(ts) {
   const d = new Date(ts * 1000);
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/* ---------------- 设置 ---------------- */
+/* 设置 */
+async function persistFeatures(patch, message) {
+  const cfg = JSON.parse(JSON.stringify(S.config || {}));
+  cfg.features = cfg.features || {};
+  Object.assign(cfg.features, patch);
+  const res = await invoke("save_config", cfg);
+  if (res && res.ok) {
+    S.config = cfg;
+    if (message) toast(message);
+  } else {
+    toast((res && res.message) || "保存失败", "err");
+  }
+}
 async function testModel() {
   const out = $("#test-result");
   out.textContent = "测试中…";
@@ -537,7 +542,6 @@ async function testModel() {
   });
   out.textContent = (res && res.message) || (res && res.ok ? "连接正常" : "测试失败");
 }
-
 async function saveSettings() {
   const cfg = JSON.parse(JSON.stringify(S.config || {}));
   cfg.models = cfg.models || [];
@@ -548,9 +552,6 @@ async function saveSettings() {
   first.default = true;
   cfg.models = [first];
   cfg.proxy = $("#f-proxy").value.trim();
-  cfg.features = cfg.features || {};
-  cfg.features.default_tone = $("#f-tone").value;
-
   const res = await invoke("save_config", cfg);
   if (res && res.ok) {
     S.config = cfg;
@@ -560,7 +561,6 @@ async function saveSettings() {
     toast((res && res.message) || "保存失败", "err");
   }
 }
-
 async function checkUpdate() {
   const out = $("#update-result");
   out.textContent = "检查中…";
@@ -580,7 +580,7 @@ async function checkUpdate() {
   }
 }
 
-/* ---------------- 工具 ---------------- */
+/* 工具 */
 function escapeHtml(text) {
   return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 }
