@@ -268,31 +268,6 @@ pub fn read_logs(state: State<'_, AppState>, limit: usize) -> Vec<String> {
     lines[start..].to_vec()
 }
 
-#[tauri::command]
-pub async fn test_token(token: String) -> Value {
-    let token = token.trim().to_string();
-    if token.is_empty() {
-        return err("先填 Bot Token");
-    }
-    let url = format!("https://api.telegram.org/bot{token}/getMe");
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build() {
-        Ok(c) => c,
-        Err(e) => return err(e.to_string()),
-    };
-    match client.get(url).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            let body: Value = resp.json().await.unwrap_or(Value::Null);
-            if status.is_success() && body["ok"].as_bool().unwrap_or(false) {
-                let username = body["result"]["username"].as_str().unwrap_or("");
-                json!({ "ok": true, "message": format!("已连接 @{username}") })
-            } else {
-                err("Token 无效或已被撤销")
-            }
-        }
-        Err(e) => err(format!("连接 Telegram 失败：{e}")),
-    }
-}
 
 #[tauri::command]
 pub fn open_folder(state: State<'_, AppState>, kind: String) -> Value {
@@ -385,12 +360,10 @@ pub async fn ui_call(
             let limit = arg0.as_u64().unwrap_or(200) as usize;
             json!(read_logs(state, limit))
         }
-        "test_token" => test_token(arg0.as_str().unwrap_or("").to_string()).await,
         "open_folder" => open_folder(state, arg0.as_str().unwrap_or("logs").to_string()),
         "export_diagnostics" => export_diagnostics(state),
         "get_autostart" => get_autostart(),
         "set_autostart" => set_autostart(arg0.as_bool().unwrap_or(false)),
-        "start_bot" | "stop_bot" | "restart_bot" => json!({ "ok": false, "message": "该功能已在重构中移除" }),
         "translate" => {
             let text = arg0["text"].as_str().unwrap_or("").to_string();
             let src = arg0["src"].as_str().unwrap_or("auto").to_string();
@@ -414,7 +387,6 @@ pub async fn ui_call(
             history_list(state, limit)
         }
         "history_clear" => history_clear(state),
-        "bot_status" => json!({ "running": false, "started_at": null, "pid": 0 }),
         "quit_app" => {
             app.exit(0);
             json!({ "ok": true })

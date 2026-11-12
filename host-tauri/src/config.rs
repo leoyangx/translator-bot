@@ -44,19 +44,6 @@ fn default_update_mode() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct TelegramConfig {
-    pub token: String,
-    pub admin_ids: Vec<i64>,
-}
-
-impl Default for TelegramConfig {
-    fn default() -> Self {
-        Self { token: String::new(), admin_ids: Vec::new() }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
 pub struct ModelConfig {
     pub id: String,
     pub name: String,
@@ -161,13 +148,12 @@ impl Default for UpdateConfig {
 #[serde(default)]
 pub struct AppBehavior {
     pub close_to_tray: bool,
-    pub autostart_bot: bool,
     pub check_update_on_start: bool,
 }
 
 impl Default for AppBehavior {
     fn default() -> Self {
-        Self { close_to_tray: true, autostart_bot: true, check_update_on_start: true }
+        Self { close_to_tray: true, check_update_on_start: true }
     }
 }
 
@@ -175,8 +161,6 @@ impl Default for AppBehavior {
 #[serde(default)]
 pub struct Config {
     pub version: String,
-    #[serde(rename = "telegram")]
-    pub telegram: TelegramConfig,
     pub models: Vec<ModelConfig>,
     pub languages: LanguagesConfig,
     pub features: FeaturesConfig,
@@ -191,7 +175,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             version: APP_VERSION.to_string(),
-            telegram: TelegramConfig::default(),
             models: vec![ModelConfig {
                 id: "deepseek".into(),
                 name: "DeepSeek".into(),
@@ -217,9 +200,6 @@ impl Config {
 
     pub fn validate(&self) -> Vec<String> {
         let mut issues = Vec::new();
-        if self.telegram.token.is_empty() {
-            issues.push("还没填 Telegram Bot Token".to_string());
-        }
         if self.models.is_empty() {
             issues.push("还没有添加任何模型".to_string());
         } else if self.default_model().is_none() {

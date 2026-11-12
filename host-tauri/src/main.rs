@@ -302,7 +302,6 @@ fn main() {
             commands::front_log,
             commands::get_stats,
             commands::read_logs,
-            commands::test_token,
             commands::open_folder,
             commands::export_diagnostics,
             commands::get_autostart,
