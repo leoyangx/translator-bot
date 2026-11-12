@@ -264,3 +264,15 @@ impl Db {
         }
     }
 }
+
+impl Db {
+    /// 只保留最近 N 条历史
+    pub fn trim_history(&self, keep: usize) {
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute(
+                "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT ?1)",
+                rusqlite::params![keep as i64],
+            );
+        }
+    }
+}

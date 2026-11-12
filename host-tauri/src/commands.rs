@@ -435,6 +435,7 @@ pub async fn translate_text(
         Ok((output, cached)) => {
             db.bump_usage();
             db.add_history(&src_code, &tgt_code, &tone, &text, &output, cached);
+            db.trim_history(500);
             Ok(json!({
                 "ok": true,
                 "translation": output,

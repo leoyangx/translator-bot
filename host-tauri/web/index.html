@@ -9,92 +9,105 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <img src="assets/icon-512.png" alt="" class="logo">
-      <span class="brand-name">翻译</span>
+    <div class="menu-wrap">
+      <button id="btn-menu" class="icon-btn" title="菜单">☰</button>
+      <div class="menu-pop" id="menu-pop" hidden>
+        <button class="menu-item" data-menu="settings">设置</button>
+        <button class="menu-item" data-menu="data">打开数据目录</button>
+        <button class="menu-item" data-menu="about">关于</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" data-menu="quit">退出</button>
+      </div>
     </div>
 
-    <div class="lang-bar">
-      <button id="btn-src" class="lang-btn">
-        <span id="src-label">自动检测</span>
-        <span class="caret">▾</span>
-      </button>
-      <button id="btn-swap" class="swap-btn" title="互换语言">⇄</button>
-      <button id="btn-tgt" class="lang-btn">
-        <span id="tgt-label">英语</span>
-        <span class="caret">▾</span>
-      </button>
-    </div>
+    <nav class="tabs">
+      <button class="tab active" data-view="text">文本</button>
+      <button class="tab" data-view="glossary">术语表</button>
+      <button class="tab" data-view="history">历史</button>
+    </nav>
 
-    <div class="actions">
-      <button id="btn-glossary" class="ghost-btn">📖 术语表</button>
-      <button id="btn-history" class="ghost-btn">🕘 历史</button>
+    <div class="top-right">
       <button id="btn-theme" class="icon-btn" title="切换主题">🌙</button>
-      <button id="btn-settings" class="icon-btn" title="设置">⚙</button>
     </div>
   </header>
 
-  <main class="workspace">
-    <section class="pane pane-input">
-      <textarea id="input" placeholder="输入或粘贴文本进行翻译" spellcheck="false"></textarea>
-      <div class="pane-foot">
-        <span id="char-count" class="meta">0 / 6000 字</span>
-        <div class="foot-actions">
-          <button id="btn-clear" class="ghost-btn">清空</button>
-          <button id="btn-translate" class="primary-btn">翻译 <span class="kbd">Ctrl+↵</span></button>
-        </div>
+  <div class="langbar" id="langbar">
+    <button id="btn-src" class="lang-btn">
+      <span id="src-label">自动检测</span>
+      <span class="caret">▾</span>
+    </button>
+    <button id="btn-swap" class="swap-btn" title="互换语言并翻译回去">⇄</button>
+    <button id="btn-tgt" class="lang-btn">
+      <span id="tgt-label">英语</span>
+      <span class="caret">▾</span>
+    </button>
+  </div>
+
+  <main class="main">
+    <!-- 文本 -->
+    <section class="view active" id="view-text">
+      <div class="workspace">
+        <section class="pane pane-input">
+          <textarea id="input" placeholder="输入或粘贴文本进行翻译" spellcheck="false"></textarea>
+          <div class="pane-foot">
+            <span id="char-count" class="meta">0 / 6000 字</span>
+            <div class="foot-actions">
+              <button id="btn-clear" class="ghost-btn">清空</button>
+              <button id="btn-translate" class="primary-btn">翻译 <span class="kbd">Ctrl+↵</span></button>
+            </div>
+          </div>
+        </section>
+
+        <section class="pane pane-output">
+          <div class="output-body">
+            <div id="output-placeholder" class="placeholder">译文会显示在这里</div>
+            <pre id="output" class="output hidden"></pre>
+            <div id="output-error" class="error hidden"></div>
+          </div>
+          <div class="pane-foot">
+            <span id="meta" class="meta"></span>
+            <div class="foot-actions">
+              <button id="btn-copy" class="ghost-btn">复制</button>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 
-    <section class="pane pane-output">
-      <div class="output-body">
-        <div id="output-placeholder" class="placeholder">译文会显示在这里</div>
-        <pre id="output" class="output hidden"></pre>
-        <div id="output-error" class="error hidden"></div>
-      </div>
-      <div class="pane-foot">
-        <span id="meta" class="meta"></span>
-        <div class="foot-actions">
-          <button id="btn-copy" class="ghost-btn">复制</button>
+    <!-- 术语表 -->
+    <section class="view" id="view-glossary">
+      <div class="page">
+        <h1>术语表</h1>
+        <p class="hint">把品牌名、行业词的译法固定下来，翻译时强制按这里的结果输出，避免每次译得不一样。</p>
+        <div class="glossary-add">
+          <input id="glossary-source" placeholder="原文，例如 Jian Zhan">
+          <input id="glossary-target" placeholder="译文，例如 建盏">
+          <button id="btn-glossary-add" class="primary-btn">添加</button>
         </div>
+        <div id="glossary-list" class="list"></div>
+      </div>
+    </section>
+
+    <!-- 历史 -->
+    <section class="view" id="view-history">
+      <div class="page">
+        <div class="page-head">
+          <h1>历史记录</h1>
+          <button id="btn-history-clear" class="ghost-btn">清空</button>
+        </div>
+        <p class="hint">最近 500 条，点击任意一条可回填并重新翻译。</p>
+        <div id="history-list" class="list"></div>
       </div>
     </section>
   </main>
 
-  <!-- 语言选择面板 -->
+  <!-- 语言面板 -->
   <div class="lang-panel" id="lang-panel" hidden>
     <div class="lang-panel-head">
       <input id="lang-search" placeholder="搜索语言" autocomplete="off">
       <button class="icon-btn" data-lang-close>✕</button>
     </div>
     <div class="lang-list" id="lang-list"></div>
-  </div>
-
-  <!-- 术语表 -->
-  <div class="drawer" id="drawer-glossary" hidden>
-    <div class="drawer-head">
-      <h2>术语表</h2>
-      <button class="icon-btn" data-close>✕</button>
-    </div>
-    <p class="hint">固定专有名词的译法，翻译时优先生效。</p>
-    <div class="glossary-add">
-      <input id="glossary-source" placeholder="原文，例如 BIN">
-      <input id="glossary-target" placeholder="译文，例如 BIN 码">
-      <button id="btn-glossary-add" class="primary-btn">添加</button>
-    </div>
-    <div id="glossary-list" class="list"></div>
-  </div>
-
-  <!-- 历史 -->
-  <div class="drawer" id="drawer-history" hidden>
-    <div class="drawer-head">
-      <h2>历史记录</h2>
-      <div>
-        <button id="btn-history-clear" class="ghost-btn">清空</button>
-        <button class="icon-btn" data-close>✕</button>
-      </div>
-    </div>
-    <div id="history-list" class="list"></div>
   </div>
 
   <!-- 设置 -->
@@ -123,6 +136,12 @@
       </select>
     </label>
     <label class="field">代理（可选）<input id="f-proxy" placeholder="http://127.0.0.1:7890"></label>
+
+    <h3>更新</h3>
+    <div class="row">
+      <button id="btn-check-update" class="ghost-btn">检查更新</button>
+      <span id="update-result" class="meta"></span>
+    </div>
 
     <h3>关于</h3>
     <div class="meta" id="version-label"></div>
