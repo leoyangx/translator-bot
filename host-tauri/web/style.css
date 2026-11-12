@@ -336,3 +336,31 @@ html[data-theme="dark"] .win-btn:hover { background: rgba(255,255,255,.08); }
 }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .modal-head h2 { margin: 0; font-size: 17px; }
+
+/* ☰ 菜单 */
+.menu-pop {
+  position: absolute;
+  top: 40px;
+  left: 6px;
+  min-width: 178px;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 80;
+}
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--accent-soft); color: var(--accent); }
+.menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
